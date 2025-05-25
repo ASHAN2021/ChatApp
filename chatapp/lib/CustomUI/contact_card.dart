@@ -3,22 +3,43 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/svg.dart';
 
 class ContactCard extends StatelessWidget {
-  const ContactCard({super.key, this.contact});
-
   final ChatModel? contact;
+  final VoidCallback? onTap;
+
+  const ContactCard({Key? key, this.contact, this.onTap}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: () {},
+      onTap: onTap,
       child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: Colors.blueGrey,
-          child: SvgPicture.asset(
-            'assets/person.svg',
-            width: 38,
-            height: 38,
-            color: Colors.white,
+        leading: Container(
+          width: 50,
+          height: 53,
+          child: Stack(
+            children: [
+              CircleAvatar(
+                radius: 23,
+                backgroundColor: Colors.blueGrey,
+                child: SvgPicture.asset(
+                  'assets/person.svg',
+                  width: 38,
+                  height: 38,
+                  color: Colors.white,
+                ),
+              ),
+              contact?.select == true
+                  ? Positioned(
+                      bottom: 4,
+                      right: 5,
+                      child: CircleAvatar(
+                        backgroundColor: Colors.teal,
+                        radius: 10,
+                        child: Icon(Icons.check, color: Colors.white, size: 18),
+                      ),
+                    )
+                  : Container(),
+            ],
           ),
         ),
         title: Text(
