@@ -30,6 +30,12 @@ class _VideoViewState extends State<VideoView> {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () {
+            Navigator.pop(context);
+          },
+        ),
         backgroundColor: Colors.black,
         actions: [
           IconButton(
@@ -119,6 +125,29 @@ class _VideoViewState extends State<VideoView> {
                     ),
                   ),
                   style: TextStyle(color: Colors.white, fontSize: 16),
+                ),
+              ),
+            ),
+            Align(
+              alignment: Alignment.center,
+              child: InkWell(
+                onTap: () {
+                  setState(() {
+                    _controller.value.isPlaying
+                        ? _controller.pause()
+                        : _controller.play();
+                  });
+                },
+                child: CircleAvatar(
+                  radius: 33,
+                  backgroundColor: Colors.black38,
+                  child: Icon(
+                    _controller.value.isPlaying
+                        ? Icons.pause
+                        : Icons.play_arrow,
+                    color: Colors.white,
+                    size: 50,
+                  ),
                 ),
               ),
             ),

@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:camera/camera.dart';
 import 'package:chatapp/Screens/camera_view.dart';
 import 'package:chatapp/Screens/video_view.dart';
@@ -20,6 +22,9 @@ class _CameraScreenState extends State<CameraScreen> {
   Future<void>? camraValue;
   bool isRecording = false;
   String videoPath = "";
+  bool flashOn = false;
+  bool iscameraFront = false;
+  double transfoam = 0.0;
 
   @override
   void initState() {
@@ -62,9 +67,16 @@ class _CameraScreenState extends State<CameraScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
                       IconButton(
-                        onPressed: () {},
+                        onPressed: () {
+                          setState(() {
+                            flashOn = !flashOn;
+                          });
+                          flashOn
+                              ? _cameraController.setFlashMode(FlashMode.torch)
+                              : _cameraController.setFlashMode(FlashMode.off);
+                        },
                         icon: Icon(
-                          Icons.flash_off,
+                          flashOn ? Icons.flash_on : Icons.flash_off,
                           color: Colors.white,
                           size: 28,
                         ),
@@ -107,11 +119,25 @@ class _CameraScreenState extends State<CameraScreen> {
                               ),
                       ),
                       IconButton(
-                        onPressed: () {},
-                        icon: Icon(
-                          Icons.flip_camera_ios,
-                          color: Colors.white,
-                          size: 28,
+                        onPressed: () async {
+                          setState(() {
+                            iscameraFront = !iscameraFront;
+                            transfoam = transfoam + pi;
+                          });
+                          int cameraIndex = iscameraFront ? 0 : 1;
+                          _cameraController = CameraController(
+                            cameras[cameraIndex],
+                            ResolutionPreset.high,
+                          );
+                          camraValue = _cameraController.initialize();
+                        },
+                        icon: Transform.rotate(
+                          angle: transfoam,
+                          child: Icon(
+                            Icons.flip_camera_ios,
+                            color: Colors.white,
+                            size: 28,
+                          ),
                         ),
                       ),
                     ],
