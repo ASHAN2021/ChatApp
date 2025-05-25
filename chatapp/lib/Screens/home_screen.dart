@@ -1,3 +1,4 @@
+import 'package:chatapp/Pages/camera_page.dart';
 import 'package:chatapp/Pages/chat_page.dart';
 import 'package:flutter/material.dart';
 
@@ -89,7 +90,7 @@ class _HomeScreenState extends State<HomeScreen>
       body: TabBarView(
         controller: _controller,
         children: [
-          Center(child: Text('Camera')),
+          CameraPage(),
           ChatPage(),
           Center(child: Text('Status')),
           Center(child: Text('Calls')),
