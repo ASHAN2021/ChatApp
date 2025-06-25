@@ -4,6 +4,7 @@ import 'package:chatapp/Model/chat_model.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/svg.dart';
+import 'package:socket_io_client/socket_io_client.dart' as IO;
 
 class IndividualPage extends StatefulWidget {
   const IndividualPage({super.key, this.chatModel});
@@ -17,10 +18,13 @@ class IndividualPage extends StatefulWidget {
 class _IndividualPageState extends State<IndividualPage> {
   bool isEmojiVisible = false;
   FocusNode textFieldFocusNode = FocusNode();
+  late IO.Socket socket;
   TextEditingController textFieldController = TextEditingController();
+  bool sendButton = false;
   @override
   void initState() {
     super.initState();
+    connect();
     textFieldFocusNode.addListener(() {
       if (textFieldFocusNode.hasFocus) {
         setState(() {
@@ -28,6 +32,33 @@ class _IndividualPageState extends State<IndividualPage> {
         });
       }
     });
+  }
+
+  void connect() {
+    socket = IO.io(
+      "http://10.0.2.2:8000",
+      IO.OptionBuilder()
+          .setTransports(['websocket']) // Required for Flutter
+          .enableForceNew() // Force new connection
+          .enableAutoConnect() // Auto connect is true by default
+          .build(),
+    );
+
+    socket.onConnect((_) {
+      print("✅ Socket connected with ID: ${socket.id}");
+      socket.emit("/test", "Hello from Flutter!");
+    });
+
+    socket.onConnectError((data) {
+      print("❌ Connect Error: $data");
+    });
+
+    socket.onError((data) {
+      print("❌ Socket Error: $data");
+    });
+
+    socket.connect();
+    print("🔄 Connecting to socket...");
   }
 
   @override
@@ -182,6 +213,18 @@ class _IndividualPageState extends State<IndividualPage> {
                                   keyboardType: TextInputType.multiline,
                                   maxLines: 5,
                                   minLines: 1,
+                                  //after typing the message, the send button will appear
+                                  onChanged: (value) {
+                                    if (value.length > 0) {
+                                      setState(() {
+                                        sendButton = true;
+                                      });
+                                    } else {
+                                      setState(() {
+                                        sendButton = false;
+                                      });
+                                    }
+                                  },
                                   decoration: InputDecoration(
                                     border: InputBorder.none,
                                     hintText: 'Type a message',
@@ -240,8 +283,8 @@ class _IndividualPageState extends State<IndividualPage> {
                               radius: 25,
                               backgroundColor: const Color(0xff128C7E),
                               child: IconButton(
-                                icon: const Icon(
-                                  Icons.mic,
+                                icon: Icon(
+                                  sendButton ? Icons.send : Icons.mic,
                                   color: Colors.white,
                                 ),
                                 onPressed: () {

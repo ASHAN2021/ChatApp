@@ -1,9 +1,11 @@
+import 'package:chatapp/Model/chat_model.dart';
 import 'package:chatapp/Pages/camera_page.dart';
 import 'package:chatapp/Pages/chat_page.dart';
 import 'package:flutter/material.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({super.key, this.chatmodels});
+  final List<ChatModel>? chatmodels;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -91,7 +93,7 @@ class _HomeScreenState extends State<HomeScreen>
         controller: _controller,
         children: [
           CameraPage(),
-          ChatPage(),
+          ChatPage(chats: widget.chatmodels,),
           Center(child: Text('Status')),
           Center(child: Text('Calls')),
         ],
