@@ -47,7 +47,7 @@ class _LoginScreenState extends State<LoginScreen> {
             sourceChat = chats.removeAt(index);
             Navigator.pushReplacement(
               context,
-              MaterialPageRoute(builder: (builder) => HomeScreen(chatmodels: chats,)),
+              MaterialPageRoute(builder: (builder) => HomeScreen(chatmodels: chats,sourceChat: sourceChat,)),
             );
           },
           child: ButtonCard(name: chats[index].name, icon: Icons.person),

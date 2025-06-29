@@ -1,16 +1,19 @@
+import 'dart:io';
+
 import 'package:chatapp/CustomUI/own_message_card.dart';
 import 'package:chatapp/CustomUI/reply_message.dart';
 import 'package:chatapp/Model/chat_model.dart';
+import 'package:chatapp/Model/message_model.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 
 class IndividualPage extends StatefulWidget {
-  const IndividualPage({super.key, this.chatModel});
+  const IndividualPage({super.key, this.chatModel, this.sourceChat});
 
   final ChatModel? chatModel;
-
+  final ChatModel? sourceChat;
   @override
   State<IndividualPage> createState() => _IndividualPageState();
 }
@@ -21,6 +24,8 @@ class _IndividualPageState extends State<IndividualPage> {
   late IO.Socket socket;
   TextEditingController textFieldController = TextEditingController();
   bool sendButton = false;
+  List<MessageModel> messages = [];
+
   @override
   void initState() {
     super.initState();
@@ -46,7 +51,11 @@ class _IndividualPageState extends State<IndividualPage> {
 
     socket.onConnect((_) {
       print("✅ Socket connected with ID: ${socket.id}");
-      socket.emit("/test", "Hello from Flutter!");
+      socket.emit("signin", widget.sourceChat?.id);
+      socket.on("message", (msg) {
+        print(msg);
+        setMessage("destination", msg['message']);
+      });
     });
 
     socket.onConnectError((data) {
@@ -59,6 +68,24 @@ class _IndividualPageState extends State<IndividualPage> {
 
     socket.connect();
     print("🔄 Connecting to socket...");
+  }
+
+  void sendMessage(String message, int sourceId, int targetId) {
+    setMessage("source", message);
+    socket.emit("message", {
+      "message": message,
+      "sourceId": sourceId,
+      "targetId": targetId,
+    });
+  }
+
+  void setMessage(String type, String message) {
+    MessageModel messageModel = MessageModel(type: type, message: message);
+    setState(() {
+      setState(() {
+        messages.add(messageModel);
+      });
+    });
   }
 
   @override
@@ -163,26 +190,20 @@ class _IndividualPageState extends State<IndividualPage> {
                 children: [
                   Container(
                     height: MediaQuery.of(context).size.height - 144,
-                    child: ListView(
+                    child: ListView.builder(
                       shrinkWrap: true,
-                      children: [
-                        OwnMessageCard(),
-                        ReplyMessageCard(),
-                        OwnMessageCard(),
-                        ReplyMessageCard(),
-                        OwnMessageCard(),
-                        ReplyMessageCard(),
-                        OwnMessageCard(),
-                        ReplyMessageCard(),
-                        OwnMessageCard(),
-                        ReplyMessageCard(),
-                        OwnMessageCard(),
-                        ReplyMessageCard(),
-                        OwnMessageCard(),
-                        ReplyMessageCard(),
-                        OwnMessageCard(),
-                        ReplyMessageCard(),
-                      ],
+                      itemCount: messages.length,
+                      itemBuilder: (context, index) {
+                        if (messages[index].type == "source") {
+                          return OwnMessageCard(
+                            message: messages[index].message,
+                          );
+                        } else {
+                          return ReplyMessageCard(
+                            message: messages[index].message,
+                          );
+                        }
+                      },
                     ),
                   ),
                   Align(
@@ -204,6 +225,7 @@ class _IndividualPageState extends State<IndividualPage> {
                                   borderRadius: BorderRadius.circular(30),
                                 ),
                                 child: TextFormField(
+                                  controller: textFieldController,
                                   focusNode: textFieldFocusNode,
                                   textAlignVertical: TextAlignVertical.center,
                                   style: TextStyle(
@@ -289,6 +311,23 @@ class _IndividualPageState extends State<IndividualPage> {
                                 ),
                                 onPressed: () {
                                   // Handle send action
+                                  if (sendButton &&
+                                      widget.sourceChat?.id != null &&
+                                      widget.chatModel?.id != null &&
+                                      textFieldController.text
+                                          .trim()
+                                          .isNotEmpty) {
+                                    sendMessage(
+                                      textFieldController.text.trim(),
+                                      widget.sourceChat!.id!,
+                                      widget.chatModel!.id!,
+                                    );
+                                    // Clear the text field after sending
+                                    textFieldController.clear();
+                                    setState(() {
+                                      sendButton = false;
+                                    });
+                                  }
                                 },
                               ),
                             ),
@@ -424,5 +463,20 @@ class _IndividualPageState extends State<IndividualPage> {
         },
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    // Clean up the socket connection
+    if (socket.connected) {
+      socket.disconnect();
+    }
+    socket.dispose();
+
+    // Clean up controllers
+    textFieldController.dispose();
+    textFieldFocusNode.dispose();
+
+    super.dispose();
   }
 }
