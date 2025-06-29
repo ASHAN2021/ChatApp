@@ -1,4 +1,5 @@
 import 'package:camera/camera.dart';
+import 'package:chatapp/NewScreens/landing_screen.dart';
 import 'package:chatapp/Screens/camera_screen.dart';
 import 'package:chatapp/Screens/home_screen.dart';
 import 'package:chatapp/Screens/login_screen.dart';
@@ -24,7 +25,7 @@ class MyApp extends StatelessWidget {
           secondary: Color(0xff128C7E),
         ),
       ),
-      home: LoginScreen(),
+      home: LandingScreen(),
     );
   }
 }
