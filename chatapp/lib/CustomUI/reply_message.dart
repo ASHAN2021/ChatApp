@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 
 class ReplyMessageCard extends StatelessWidget {
-  const ReplyMessageCard({super.key, this.message});
+  const ReplyMessageCard({super.key, this.message, this.time});
   final String? message;
+  final String? time;
 
   @override
   Widget build(BuildContext context) {
@@ -34,7 +35,7 @@ class ReplyMessageCard extends StatelessWidget {
                 bottom: 4,
                 right: 5,
                 child: Text(
-                  '20:30',
+                  time ?? '00:00',
                   style: TextStyle(fontSize: 12, color: Colors.grey),
                 ),
               ),
