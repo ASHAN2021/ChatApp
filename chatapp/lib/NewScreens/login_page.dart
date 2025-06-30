@@ -12,6 +12,8 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   String countryname = "India";
   String countrycode = "+91";
+  TextEditingController phoneController = TextEditingController();
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -46,6 +48,32 @@ class _LoginPageState extends State<LoginPage> {
             SizedBox(height: 15),
             countrycard(),
             number(),
+            Expanded(child: Container()),
+            InkWell(
+              onTap: () {
+                if (phoneController.text.length < 10) {
+                  showMydilogue1();
+                } else {
+                  showMydilogue();
+                }
+              },
+              child: Container(
+                color: Colors.tealAccent[400],
+                height: 40,
+                width: 70,
+                child: Center(
+                  child: Text(
+                    "NEXT",
+                    style: TextStyle(
+                      fontSize: 18,
+                      color: Colors.black,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            SizedBox(height: 40),
           ],
         ),
       ),
@@ -95,6 +123,7 @@ class _LoginPageState extends State<LoginPage> {
     return Container(
       width: MediaQuery.of(context).size.width / 1.5,
       height: 38,
+      padding: EdgeInsets.symmetric(vertical: 5),
       child: Row(
         children: [
           Container(
@@ -106,6 +135,7 @@ class _LoginPageState extends State<LoginPage> {
             ),
             child: Row(
               children: [
+                SizedBox(width: 5),
                 Text(
                   "+",
                   style: TextStyle(
@@ -135,6 +165,7 @@ class _LoginPageState extends State<LoginPage> {
             ),
             width: MediaQuery.of(context).size.width / 1.5 - 100,
             child: TextFormField(
+              controller: phoneController,
               keyboardType: TextInputType.phone,
               decoration: InputDecoration(
                 hintText: "Phone Number",
@@ -155,5 +186,69 @@ class _LoginPageState extends State<LoginPage> {
       countrycode = country.code ?? "+91";
     });
     Navigator.pop(context);
+  }
+
+  Future<void> showMydilogue() {
+    return showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text("We will verifying your phone number"),
+                SizedBox(height: 10),
+                Text(countrycode + " " + phoneController.text),
+                SizedBox(height: 10),
+                Text("is this Ok? or would you like to edit the number?"),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+              },
+              child: Text("Edit"),
+            ),
+            TextButton(
+              onPressed: () {
+                // Here you can add the logic to proceed with the phone number verification
+                Navigator.pop(context);
+              },
+              child: Text("OK"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> showMydilogue1() {
+    return showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [Text("There is no Phone Number entered")],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                // Here you can add the logic to proceed with the phone number verification
+                Navigator.pop(context);
+              },
+              child: Text("OK"),
+            ),
+          ],
+        );
+      },
+    );
   }
 }
