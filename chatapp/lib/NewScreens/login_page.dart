@@ -1,5 +1,6 @@
 import 'package:chatapp/Model/country_model.dart';
 import 'package:chatapp/NewScreens/country_page.dart';
+import 'package:chatapp/NewScreens/otp_screen.dart';
 import 'package:flutter/material.dart';
 
 class LoginPage extends StatefulWidget {
@@ -217,6 +218,15 @@ class _LoginPageState extends State<LoginPage> {
               onPressed: () {
                 // Here you can add the logic to proceed with the phone number verification
                 Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (builder) => OtpScreen(
+                      countryCode: countrycode,
+                      phoneNumber: phoneController.text,
+                    ),
+                  ),
+                );
               },
               child: Text("OK"),
             ),
