@@ -1,4 +1,5 @@
 import 'package:chatapp/Model/chat_model.dart';
+import 'package:chatapp/NewScreens/call_screen.dart';
 import 'package:chatapp/Pages/camera_page.dart';
 import 'package:chatapp/Pages/chat_page.dart';
 import 'package:flutter/material.dart';
@@ -96,7 +97,7 @@ class _HomeScreenState extends State<HomeScreen>
           CameraPage(),
           ChatPage(chats: widget.chatmodels,sourceChat: widget.sourceChat,),
           Center(child: Text('Status')),
-          Center(child: Text('Calls')),
+          CallScreen()
         ],
       ),
     );

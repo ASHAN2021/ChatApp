@@ -6,6 +6,10 @@ class CameraPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CameraScreen();
+    return CameraScreen(
+      onImageSend: (image) {
+        // TODO: Implement image send logic
+      },
+    );
   }
 }
