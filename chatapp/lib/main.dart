@@ -1,12 +1,17 @@
 import 'package:camera/camera.dart';
-import 'package:chatapp/NewScreens/landing_screen.dart';
-import 'package:chatapp/Screens/camera_screen.dart';
-import 'package:chatapp/Screens/home_screen.dart';
-import 'package:chatapp/Screens/login_screen.dart';
+import 'package:chatapp/Screens/welcome_screen.dart';
+import 'package:chatapp/Services/database_service.dart';
 import 'package:flutter/material.dart';
+
+late List<CameraDescription> cameras;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Force complete database reset to fix isRead column issue
+  print('🔄 Forcing complete database reset...');
+  await DatabaseService.forceCompleteReset();
+
   cameras = await availableCameras();
   runApp(MyApp());
 }
@@ -25,7 +30,7 @@ class MyApp extends StatelessWidget {
           secondary: Color(0xff128C7E),
         ),
       ),
-      home: LoginScreen(),
+      home: WelcomeScreen(),
     );
   }
 }

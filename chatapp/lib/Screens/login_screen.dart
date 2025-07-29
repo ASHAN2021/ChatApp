@@ -14,20 +14,22 @@ class _LoginScreenState extends State<LoginScreen> {
   ChatModel? sourceChat;
   List<ChatModel> chats = [
     ChatModel(
+      id: '1',
       name: 'John Doe',
-      icon: 'assets/person.svg',
+      lastMessage: 'Hello, how are you?',
+      lastMessageTime: DateTime.now(),
       isGroup: false,
       currentMessage: 'Hello, how are you?',
       time: '18.04',
-      id: 1,
     ),
     ChatModel(
+      id: '2',
       name: 'Jane Smith',
-      icon: 'assets/person.svg',
+      lastMessage: 'Let\'s catch up later.',
+      lastMessageTime: DateTime.now(),
       isGroup: false,
       currentMessage: 'Let\'s catch up later.',
       time: '17.30',
-      id: 2,
     ),
     // ChatModel(
     //   name: 'Group Chat',
@@ -47,7 +49,10 @@ class _LoginScreenState extends State<LoginScreen> {
             sourceChat = chats.removeAt(index);
             Navigator.pushReplacement(
               context,
-              MaterialPageRoute(builder: (builder) => HomeScreen(chatmodels: chats,sourceChat: sourceChat,)),
+              MaterialPageRoute(
+                builder: (builder) =>
+                    HomeScreen(chatmodels: chats, sourceChat: sourceChat),
+              ),
             );
           },
           child: ButtonCard(name: chats[index].name, icon: Icons.person),
