@@ -1,5 +1,4 @@
 import 'package:chatapp/CustomUI/avatar_card.dart';
-import 'package:chatapp/CustomUI/button_card.dart';
 import 'package:chatapp/CustomUI/contact_card.dart';
 import 'package:chatapp/Model/chat_model.dart';
 import 'package:flutter/material.dart';
@@ -13,9 +12,27 @@ class CreateGroup extends StatefulWidget {
 
 class _CreateGroupState extends State<CreateGroup> {
   List<ChatModel> contacts = [
-    ChatModel(name: 'John Doe', status: 'fullstack developer'),
-    ChatModel(name: 'John Dolton', status: 'web developer'),
-    ChatModel(name: 'John Smith', status: 'mobile developer'),
+    ChatModel(
+      id: 'contact_1',
+      name: 'John Doe',
+      lastMessage: 'fullstack developer',
+      lastMessageTime: DateTime.now(),
+      time: '18:04',
+    ),
+    ChatModel(
+      id: 'contact_2',
+      name: 'John Dolton',
+      lastMessage: 'web developer',
+      lastMessageTime: DateTime.now(),
+      time: '17:30',
+    ),
+    ChatModel(
+      id: 'contact_3',
+      name: 'John Smith',
+      lastMessage: 'mobile developer',
+      lastMessageTime: DateTime.now(),
+      time: '16:45',
+    ),
   ];
 
   List<ChatModel> groups = [];

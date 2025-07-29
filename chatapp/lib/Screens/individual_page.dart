@@ -14,9 +14,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
-
-// Remove this import for now
-// import 'package:permission_handler/permission_handler.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 
 class IndividualPage extends StatefulWidget {
@@ -32,6 +29,7 @@ class _IndividualPageState extends State<IndividualPage> {
   bool isEmojiVisible = false;
   FocusNode textFieldFocusNode = FocusNode();
   late IO.Socket socket;
+  bool isSocketConnected = false;
   TextEditingController textFieldController = TextEditingController();
   bool sendButton = false;
   List<MessageModel> messages = [];
@@ -53,125 +51,352 @@ class _IndividualPageState extends State<IndividualPage> {
   }
 
   void connect() {
+    print("🔄 Initializing socket connection...");
+
+    // Try different addresses based on device type
+    _connectWithFallback();
+  }
+
+  void _connectWithFallback() {
+    print("🔍 Detecting device type for optimal connection...");
+    print("🔍 Source Chat ID: ${widget.sourceChat?.id}");
+    print("🔍 Target Chat ID: ${widget.chatModel?.id}");
+
+    // Detect if running on emulator by checking for specific emulator characteristics
+    bool isEmulator =
+        Platform.isAndroid &&
+        (Platform.environment['ANDROID_DATA']?.contains('emulator') == true ||
+            Platform.environment['FLUTTER_TEST'] == 'true');
+
+    print(
+      "🤖 Device type detected: ${isEmulator ? 'Android Emulator' : 'Physical Device'}",
+    );
+
+    // Reorder addresses based on device type for better success rate
+    List<String> serverAddresses;
+
+    if (isEmulator) {
+      // For emulator, prioritize emulator-specific addresses
+      serverAddresses = [
+        "http://10.0.2.2:8000", // Primary emulator address
+        "http://127.0.0.1:8000", // Loopback
+        "http://localhost:8000", // Localhost
+        "http://192.168.8.123:8000", // Wi-Fi IP
+        "http://192.168.56.1:8000", // Ethernet IP
+      ];
+    } else {
+      // For physical devices, prioritize network addresses
+      serverAddresses = [
+        "http://192.168.8.123:8000", // Wi-Fi IP (best for physical devices)
+        "http://192.168.56.1:8000", // Ethernet IP
+        "http://10.0.2.2:8000", // Emulator address (fallback)
+        "http://localhost:8000", // Localhost
+        "http://127.0.0.1:8000", // Loopback
+      ];
+    }
+
+    print(
+      "🌐 Will try addresses in this order for ${isEmulator ? 'emulator' : 'physical device'}:",
+    );
+    for (int i = 0; i < serverAddresses.length; i++) {
+      print("   ${i + 1}. ${serverAddresses[i]}");
+    }
+
+    _tryConnectToAddress(serverAddresses, 0);
+  }
+
+  void _tryConnectToAddress(List<String> addresses, int index) {
+    if (index >= addresses.length) {
+      print("❌ All connection attempts failed");
+      print(
+        "💡 Suggestion: Check if server is running and firewall allows port 8000",
+      );
+      setState(() {
+        isSocketConnected = false;
+      });
+      return;
+    }
+
+    String address = addresses[index];
+    print(
+      "🔄 Attempting connection ${index + 1}/${addresses.length} to: $address",
+    );
+
     socket = IO.io(
-      "http://10.0.2.2:8000",
+      address,
       IO.OptionBuilder()
-          .setTransports(['websocket']) // Required for Flutter
-          .enableForceNew() // Force new connection
-          .enableAutoConnect() // Auto connect is true by default
+          .setTransports(['websocket', 'polling']) // Add polling as fallback
+          .enableForceNew()
+          .enableAutoConnect()
+          .setTimeout(20000) // 20 seconds timeout per attempt
+          .setReconnectionAttempts(3) // More attempts for each address
+          .setReconnectionDelay(1000) // Faster retry
           .build(),
     );
 
     socket.onConnect((_) {
-      print("✅ Socket connected with ID: ${socket.id}");
-      socket.emit("signin", widget.sourceChat?.id);
-      socket.on("message", (msg) {
-        print(msg);
-        setMessage("destination", msg['message'], msg['path']);
+      print("✅ Socket connected with ID: ${socket.id} to $address");
+      print("📝 Signing in with sourceId: ${widget.sourceChat?.id}");
+      print("🎯 Target will be: ${widget.chatModel?.id}");
+      setState(() {
+        isSocketConnected = true;
       });
+      socket.emit("signin", widget.sourceChat?.id);
+    });
+
+    // Set up message listener outside of onConnect to avoid multiple registrations
+    socket.on("message", (msg) {
+      print("📨 Message received from server: $msg");
+      try {
+        if (msg != null && msg['message'] != null) {
+          print("✅ Processing incoming message: ${msg['message']}");
+          setMessage("destination", msg['message'], msg['path'] ?? '');
+        } else {
+          print("❌ Invalid message format received");
+        }
+      } catch (e) {
+        print("❌ Error processing message: $e");
+      }
     });
 
     socket.onConnectError((data) {
-      print("❌ Connect Error: $data");
+      print("❌ Connect Error to $address: $data");
+      socket.dispose();
+
+      // Try next address after a short delay
+      Future.delayed(Duration(milliseconds: 1000), () {
+        _tryConnectToAddress(addresses, index + 1);
+      });
     });
 
     socket.onError((data) {
-      print("❌ Socket Error: $data");
+      print("❌ Socket Error on $address: $data");
+      // Don't change connection state here, let onConnectError handle it
+    });
+
+    socket.onDisconnect((_) {
+      print("🔌 Socket disconnected from $address");
+      setState(() {
+        isSocketConnected = false;
+      });
+    });
+
+    socket.onReconnect((_) {
+      print("🔄 Socket reconnected to $address");
+      setState(() {
+        isSocketConnected = true;
+      });
+      socket.emit("signin", widget.sourceChat?.id);
     });
 
     socket.connect();
-    print("🔄 Connecting to socket...");
+    print("🔄 Connecting to socket at $address...");
   }
 
-  void sendMessage(String message, int sourceId, int targetId, String path) {
+  void _reconnectSocket() {
+    print("🔄 Manual reconnection triggered...");
+    setState(() {
+      isSocketConnected = false;
+    });
+
+    if (socket.connected) {
+      socket.disconnect();
+    }
+
+    // Wait a moment then reconnect
+    Future.delayed(Duration(milliseconds: 500), () {
+      connect();
+    });
+  }
+
+  void _connectAsEmulator() {
+    print("🤖 Forcing emulator connection mode...");
+    setState(() {
+      isSocketConnected = false;
+    });
+
+    if (socket.connected) {
+      socket.disconnect();
+    }
+
+    // Force emulator connection with priority order
+    List<String> emulatorAddresses = [
+      "http://10.0.2.2:8000",
+      "http://127.0.0.1:8000",
+      "http://localhost:8000",
+    ];
+
+    print("🌐 Forcing emulator addresses:");
+    for (int i = 0; i < emulatorAddresses.length; i++) {
+      print("   ${i + 1}. ${emulatorAddresses[i]}");
+    }
+
+    Future.delayed(Duration(milliseconds: 500), () {
+      _tryConnectToAddress(emulatorAddresses, 0);
+    });
+  }
+
+  Future<void> _testServerConnection() async {
+    print("🧪 Testing server connection...");
+    print("🔍 Source ID: ${widget.sourceChat?.id}");
+    print("🔍 Target ID: ${widget.chatModel?.id}");
+
+    try {
+      // Detect device type
+      bool isEmulator =
+          Platform.isAndroid &&
+          (Platform.environment['ANDROID_DATA']?.contains('emulator') == true ||
+              Platform.environment['FLUTTER_TEST'] == 'true');
+
+      print(
+        "🤖 Testing from: ${isEmulator ? 'Android Emulator' : 'Physical Device'}",
+      );
+
+      final addresses = isEmulator
+          ? [
+              '10.0.2.2', // Primary for emulator
+              '127.0.0.1',
+              'localhost',
+              '192.168.8.123',
+              '192.168.56.1',
+            ]
+          : [
+              '192.168.8.123', // Primary for physical device
+              '192.168.56.1',
+              '10.0.2.2',
+              'localhost',
+              '127.0.0.1',
+            ];
+
+      bool foundConnection = false;
+      for (String address in addresses) {
+        try {
+          print("🔍 Testing TCP connection to $address:8000...");
+          final socket = await Socket.connect(
+            address,
+            8000,
+            timeout: Duration(seconds: 3),
+          );
+          print("✅ Successfully connected to $address:8000");
+          socket.destroy();
+
+          if (!foundConnection) {
+            print("💡 Recommended server address: http://$address:8000");
+            foundConnection = true;
+          }
+        } catch (e) {
+          print("❌ Failed to connect to $address:8000: $e");
+        }
+      }
+
+      if (!foundConnection) {
+        print("❌ All server connection tests failed");
+        print(
+          "💡 Check: 1) Server running 2) Firewall allows port 8000 3) Network connectivity",
+        );
+      }
+    } catch (e) {
+      print("❌ Server connection test error: $e");
+    }
+  }
+
+  void _checkServerUsers() {
+    print("👥 Checking server user status...");
+    print("🔍 My User ID: ${widget.sourceChat?.id}");
+    print("🎯 Looking for Target ID: ${widget.chatModel?.id}");
+    print("🔌 Socket Connected: ${socket.connected}");
+    print("🆔 Socket ID: ${socket.id}");
+
+    if (socket.connected) {
+      print("💬 Requesting server user list...");
+      socket.emit("requestUserList");
+    } else {
+      print("❌ Cannot check users - socket not connected");
+    }
+  }
+
+  void sendMessage(
+    String message,
+    String sourceId,
+    String targetId,
+    String path,
+  ) {
+    print("📤 ========== SENDING MESSAGE ==========");
+    print("   Message: '$message'");
+    print("   SourceId: $sourceId");
+    print("   TargetId: $targetId");
+    print("   Path: $path");
+    print("   Socket connected: ${socket.connected}");
+    print("   Socket ID: ${socket.id}");
+
+    if (sourceId == targetId) {
+      print("⚠️  WARNING: Source and Target IDs are the same!");
+      print("   This means you're trying to send a message to yourself.");
+      print(
+        "   Make sure you're using different user accounts on each device.",
+      );
+    }
+
+    if (!socket.connected) {
+      print("❌ Socket not connected, cannot send message");
+      print("💡 Try using 'Reconnect' from the menu");
+      return;
+    }
+
     setMessage("source", message, path);
-    socket.emit("message", {
+
+    final messageData = {
       "message": message,
       "sourceId": sourceId,
       "targetId": targetId,
       "path": path,
-    });
+    };
+
+    print("📡 Emitting to server: $messageData");
+    socket.emit("message", messageData);
+    print("✅ Message emitted to server - waiting for server to route it");
+    print("🔍 Server should look for user: $targetId");
+    print("=========================================");
   }
 
   void setMessage(String type, String message, String path) {
-    MessageModel messageModel = MessageModel(
-      type: type,
+    MessageModel messageModel = MessageModel.legacy(
+      type: type == "source" ? "source" : "destination",
       message: message,
       path: path,
       time: DateTime.now().toString().substring(10, 16),
     );
+
+    // Set isMe based on type
+    if (type == "source") {
+      messageModel = MessageModel(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        chatId: widget.chatModel?.id ?? '',
+        senderId: widget.sourceChat?.id ?? '',
+        message: message,
+        timestamp: DateTime.now(),
+        isMe: true,
+        messageType: 'text',
+        path: path,
+        time: DateTime.now().toString().substring(10, 16),
+      );
+    } else {
+      messageModel = MessageModel(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        chatId: widget.chatModel?.id ?? '',
+        senderId: widget.chatModel?.id ?? '',
+        message: message,
+        timestamp: DateTime.now(),
+        isMe: false,
+        messageType: 'text',
+        path: path,
+        time: DateTime.now().toString().substring(10, 16),
+      );
+    }
+
     setState(() {
-      setState(() {
-        messages.add(messageModel);
-      });
+      messages.add(messageModel);
     });
-  }
-
-  // Simplified image picker methods without permission_handler
-  Future<void> _pickImageFromGallery() async {
-    try {
-      final XFile? pickedFile = await _picker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 1920,
-        maxHeight: 1080,
-        imageQuality: 85,
-      );
-
-      if (pickedFile != null) {
-        setState(() {
-          file = pickedFile;
-        });
-        Navigator.pop(context); // Close the bottom sheet
-        print('Image selected: ${pickedFile.path}');
-
-        // Show success message
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Image selected successfully!')));
-      }
-    } catch (e) {
-      print('Error picking image from gallery: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Failed to pick image. Please check app permissions in settings.',
-          ),
-        ),
-      );
-    }
-  }
-
-  Future<void> _pickImageFromCamera() async {
-    try {
-      final XFile? pickedFile = await _picker.pickImage(
-        source: ImageSource.camera,
-        maxWidth: 1920,
-        maxHeight: 1080,
-        imageQuality: 85,
-      );
-
-      if (pickedFile != null) {
-        setState(() {
-          file = pickedFile;
-        });
-        Navigator.pop(context); // Close the bottom sheet
-        print('Image captured: ${pickedFile.path}');
-
-        // Show success message
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Photo captured successfully!')));
-      }
-    } catch (e) {
-      print('Error capturing image: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Failed to capture image. Please check camera permissions in settings.',
-          ),
-        ),
-      );
-    }
   }
 
   void onImageSend(String path, String message) async {
@@ -258,10 +483,26 @@ class _IndividualPageState extends State<IndividualPage> {
                       ),
                     ),
                     Text(
-                      'last seen today at 12:00 PM',
+                      isSocketConnected ? 'Connected ✓' : 'Connecting...',
                       style: TextStyle(
                         fontSize: 13,
-                        color: Colors.white.withOpacity(0.7),
+                        color: isSocketConnected
+                            ? Color(0xff25D366)
+                            : Colors.white.withOpacity(0.7),
+                      ),
+                    ),
+                    Text(
+                      'Source: ${widget.sourceChat?.id != null ? widget.sourceChat!.id.substring(0, 8) : 'Unknown'}',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.white.withOpacity(0.6),
+                      ),
+                    ),
+                    Text(
+                      'Target: ${widget.chatModel?.id != null ? widget.chatModel!.id.substring(0, 8) : 'Unknown'}',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.white.withOpacity(0.6),
                       ),
                     ),
                   ],
@@ -274,9 +515,64 @@ class _IndividualPageState extends State<IndividualPage> {
               PopupMenuButton<String>(
                 onSelected: (value) {
                   print(value);
+                  if (value == "Reconnect") {
+                    _reconnectSocket();
+                  } else if (value == "Test Connection") {
+                    _testServerConnection();
+                  } else if (value == "Force Emulator Mode") {
+                    _connectAsEmulator();
+                  } else if (value == "Check Server Status") {
+                    _checkServerUsers();
+                  }
                 },
                 itemBuilder: (context) {
                   return [
+                    PopupMenuItem(
+                      child: Row(
+                        children: [
+                          Icon(
+                            isSocketConnected ? Icons.wifi : Icons.wifi_off,
+                            color: isSocketConnected
+                                ? Colors.green
+                                : Colors.red,
+                            size: 20,
+                          ),
+                          SizedBox(width: 8),
+                          Text('Reconnect'),
+                        ],
+                      ),
+                      value: "Reconnect",
+                    ),
+                    PopupMenuItem(
+                      child: Row(
+                        children: [
+                          Icon(Icons.network_check, size: 20),
+                          SizedBox(width: 8),
+                          Text('Test Connection'),
+                        ],
+                      ),
+                      value: "Test Connection",
+                    ),
+                    PopupMenuItem(
+                      child: Row(
+                        children: [
+                          Icon(Icons.android, color: Colors.green, size: 20),
+                          SizedBox(width: 8),
+                          Text('Force Emulator Mode'),
+                        ],
+                      ),
+                      value: "Force Emulator Mode",
+                    ),
+                    PopupMenuItem(
+                      child: Row(
+                        children: [
+                          Icon(Icons.people, color: Colors.blue, size: 20),
+                          SizedBox(width: 8),
+                          Text('Check Server Status'),
+                        ],
+                      ),
+                      value: "Check Server Status",
+                    ),
                     PopupMenuItem(
                       child: Text('View Contact'),
                       value: "View Contact",
@@ -308,28 +604,27 @@ class _IndividualPageState extends State<IndividualPage> {
                       shrinkWrap: true,
                       itemCount: messages.length,
                       itemBuilder: (context, index) {
-                        if (messages[index].type == "source") {
+                        if (messages[index].isMe) {
                           if (messages[index].path.length > 0) {
                             return OwnFileCard(
                               path: messages[index].path,
                               message: messages[index].message,
-                              time: messages[index].time,
+                              time: messages[index].time ?? '',
                             );
                           } else {
-                            return OwnMessageCard(
-                              message: messages[index].message,
-                            );
+                            return OwnMessageCard(message: messages[index]);
                           }
                         } else {
                           if (messages[index].path.length > 0) {
                             return ReplyFileCard(
                               path: messages[index].path,
                               message: messages[index].message,
-                              time: messages[index].time,
+                              time: messages[index].time ?? '',
                             );
                           } else {
                             return ReplyMessageCard(
                               message: messages[index].message,
+                              time: messages[index].time,
                             );
                           }
                         }
@@ -462,8 +757,8 @@ class _IndividualPageState extends State<IndividualPage> {
                                           .isNotEmpty) {
                                     sendMessage(
                                       textFieldController.text.trim(),
-                                      widget.sourceChat!.id!,
-                                      widget.chatModel!.id!,
+                                      widget.sourceChat!.id,
+                                      widget.chatModel!.id,
                                       '', // Pass an empty string for path if not sending a file
                                     );
                                     // Clear the text field after sending
