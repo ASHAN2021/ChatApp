@@ -1,13 +1,20 @@
 import 'package:chatapp/Model/chat_model.dart';
+import 'package:chatapp/Model/user_model.dart';
 import 'package:chatapp/NewScreens/call_screen.dart';
 import 'package:chatapp/Pages/camera_page.dart';
 import 'package:chatapp/Pages/chat_page.dart';
 import 'package:flutter/material.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, this.chatmodels, this.sourceChat});
+  const HomeScreen({
+    super.key,
+    this.chatmodels,
+    this.sourceChat,
+    this.currentUser,
+  });
   final List<ChatModel>? chatmodels;
   final ChatModel? sourceChat;
+  final UserModel? currentUser;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -95,9 +102,13 @@ class _HomeScreenState extends State<HomeScreen>
         controller: _controller,
         children: [
           CameraPage(),
-          ChatPage(chats: widget.chatmodels,sourceChat: widget.sourceChat,),
+          ChatPage(
+            chats: widget.chatmodels,
+            sourceChat: widget.sourceChat,
+            currentUser: widget.currentUser,
+          ),
           Center(child: Text('Status')),
-          CallScreen()
+          CallScreen(),
         ],
       ),
     );

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:async';
 
 import 'package:chatapp/CustomUI/own_file_card.dart';
 import 'package:chatapp/CustomUI/own_message_card.dart';
@@ -36,11 +37,17 @@ class _IndividualPageState extends State<IndividualPage> {
   ImagePicker _picker = ImagePicker();
   XFile? file;
   int popTime = 0;
+  Timer? _refreshTimer;
+  Timer? _messageCheckTimer;
+  String lastMessageId = "";
 
   @override
   void initState() {
     super.initState();
+    loadMessageHistory();
     connect();
+    _startAutoRefresh();
+
     textFieldFocusNode.addListener(() {
       if (textFieldFocusNode.hasFocus) {
         setState(() {
@@ -48,6 +55,122 @@ class _IndividualPageState extends State<IndividualPage> {
         });
       }
     });
+  }
+
+  void _startAutoRefresh() {
+    // Auto-refresh messages every 1 second
+    _refreshTimer = Timer.periodic(Duration(seconds: 1), (timer) {
+      if (mounted && !isSocketConnected) {
+        // Only refresh from API if socket is not connected
+        _refreshMessages();
+      }
+    });
+
+    // Check for real-time message updates every 500ms when socket is connected
+    _messageCheckTimer = Timer.periodic(Duration(milliseconds: 500), (timer) {
+      if (mounted && isSocketConnected) {
+        // Socket is handling real-time updates, just ensure UI is current
+        _checkForNewMessages();
+      }
+    });
+  }
+
+  Future<void> _refreshMessages() async {
+    try {
+      await loadMessageHistory();
+    } catch (e) {
+      print("❌ Error during auto-refresh: $e");
+    }
+  }
+
+  void _checkForNewMessages() {
+    // This method ensures UI stays responsive and checks for any missed updates
+    if (messages.isNotEmpty) {
+      String currentLastId = messages.last.id;
+      if (currentLastId != lastMessageId) {
+        lastMessageId = currentLastId;
+        // Scroll to bottom when new message is detected
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _scrollToBottom();
+        });
+      }
+    }
+  }
+
+  void _scrollToBottom() {
+    // Implementation depends on your scroll controller setup
+    // This is a placeholder for scroll-to-bottom functionality
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    _messageCheckTimer?.cancel();
+    socket.dispose();
+    textFieldController.dispose();
+    textFieldFocusNode.dispose();
+    super.dispose();
+  }
+
+  Future<void> loadMessageHistory() async {
+    if (widget.sourceChat?.id == null || widget.chatModel?.id == null) {
+      print("❌ Invalid user IDs for loading messages");
+      return;
+    }
+
+    try {
+      print("🔄 Loading message history...");
+
+      // Try multiple server addresses
+      List<String> serverAddresses = [
+        "http://10.0.2.2:8000", // Android emulator
+        "http://localhost:8000", // iOS simulator
+        "http://127.0.0.1:8000", // Localhost
+        "http://192.168.1.5:8000", // Current Wi-Fi IP
+        "http://192.168.2.1:8000", // Alternative IP
+      ];
+
+      http.Response? response;
+
+      for (String url in serverAddresses) {
+        try {
+          print("🔄 Trying to load messages from: $url");
+          response = await http
+              .get(
+                Uri.parse(
+                  "$url/api/messages/${widget.sourceChat!.id}/${widget.chatModel!.id}",
+                ),
+                headers: {'Content-Type': 'application/json'},
+              )
+              .timeout(Duration(seconds: 5));
+
+          if (response.statusCode == 200) {
+            print("✅ Successfully loaded messages from: $url");
+            break;
+          }
+        } catch (e) {
+          print("❌ Failed to load messages from $url: $e");
+          continue;
+        }
+      }
+
+      if (response != null && response.statusCode == 200) {
+        final List<dynamic> messageData = json.decode(response.body);
+
+        for (var msg in messageData) {
+          String messageType = msg['sourceId'] == widget.sourceChat?.id
+              ? "source"
+              : "destination";
+          setMessage(messageType, msg['message'] ?? '', msg['path'] ?? '');
+        }
+
+        print("📨 Loaded ${messageData.length} messages");
+      } else {
+        print("❌ Failed to load message history");
+      }
+    } catch (e) {
+      print("❌ Error loading message history: $e");
+    }
   }
 
   void connect() {
@@ -81,14 +204,14 @@ class _IndividualPageState extends State<IndividualPage> {
         "http://10.0.2.2:8000", // Primary emulator address
         "http://127.0.0.1:8000", // Loopback
         "http://localhost:8000", // Localhost
-        "http://192.168.8.123:8000", // Wi-Fi IP
-        "http://192.168.56.1:8000", // Ethernet IP
+        "http://192.168.1.5:8000", // Current Wi-Fi IP
+        "http://192.168.2.1:8000", // Alternative IP
       ];
     } else {
       // For physical devices, prioritize network addresses
       serverAddresses = [
-        "http://192.168.8.123:8000", // Wi-Fi IP (best for physical devices)
-        "http://192.168.56.1:8000", // Ethernet IP
+        "http://192.168.1.5:8000", // Current Wi-Fi IP (best for physical devices)
+        "http://192.168.2.1:8000", // Alternative IP
         "http://10.0.2.2:8000", // Emulator address (fallback)
         "http://localhost:8000", // Localhost
         "http://127.0.0.1:8000", // Loopback
@@ -146,16 +269,55 @@ class _IndividualPageState extends State<IndividualPage> {
 
     // Set up message listener outside of onConnect to avoid multiple registrations
     socket.on("message", (msg) {
-      print("📨 Message received from server: $msg");
+      print("📨 Real-time message received: $msg");
       try {
         if (msg != null && msg['message'] != null) {
-          print("✅ Processing incoming message: ${msg['message']}");
-          setMessage("destination", msg['message'], msg['path'] ?? '');
+          print("✅ Processing real-time message: ${msg['message']}");
+          // Add message to UI immediately for real-time update
+          _addIncomingMessage(msg);
         } else {
           print("❌ Invalid message format received");
         }
       } catch (e) {
-        print("❌ Error processing message: $e");
+        print("❌ Error processing real-time message: $e");
+      }
+    });
+
+    // Listen for message sent confirmation
+    socket.on("messageSent", (data) {
+      print("✅ Message sent confirmation received: $data");
+      _handleMessageSentConfirmation(data);
+    });
+
+    // Listen for message delivery confirmation
+    socket.on("messageDelivered", (data) {
+      print("📬 Message delivered: $data");
+      _handleMessageDelivered(data);
+    });
+
+    // Listen for message pending (user offline)
+    socket.on("messagePending", (data) {
+      print("⏳ Message pending: $data");
+      _handleMessagePending(data);
+    });
+
+    // Listen for typing indicators
+    socket.on("typing", (data) {
+      print("⌨️ Typing indicator: $data");
+      if (data['userId'] == widget.chatModel?.id) {
+        setState(() {
+          // Handle typing indicator in UI
+        });
+      }
+    });
+
+    // Listen for user activity
+    socket.on("userActivity", (data) {
+      print("👥 User activity: $data");
+      if (data['userId'] == widget.chatModel?.id) {
+        setState(() {
+          // Update user activity status
+        });
       }
     });
 
@@ -343,12 +505,14 @@ class _IndividualPageState extends State<IndividualPage> {
       return;
     }
 
-    setMessage("source", message, path);
+    // Add message to UI immediately for instant feedback
+    _addOutgoingMessage(message, path);
 
     final messageData = {
       "message": message,
       "sourceId": sourceId,
       "targetId": targetId,
+      "messageType": path.isNotEmpty ? "image" : "text",
       "path": path,
     };
 
@@ -357,6 +521,32 @@ class _IndividualPageState extends State<IndividualPage> {
     print("✅ Message emitted to server - waiting for server to route it");
     print("🔍 Server should look for user: $targetId");
     print("=========================================");
+  }
+
+  void _addOutgoingMessage(String message, String path) {
+    final newMessage = MessageModel(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      chatId: widget.chatModel?.id ?? '',
+      senderId: widget.sourceChat?.id ?? '',
+      message: message,
+      timestamp: DateTime.now(),
+      isMe: true,
+      messageType: path.isNotEmpty ? 'image' : 'text',
+      path: path,
+      time: _formatTime(DateTime.now().toIso8601String()),
+    );
+
+    setState(() {
+      messages.add(newMessage);
+      lastMessageId = newMessage.id;
+    });
+
+    // Auto-scroll to bottom
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToBottom();
+    });
+
+    print("✅ Added outgoing message to UI immediately");
   }
 
   void setMessage(String type, String message, String path) {
@@ -425,6 +615,104 @@ class _IndividualPageState extends State<IndividualPage> {
       "targetId": widget.chatModel?.id,
       "path": path,
     });
+  }
+
+  void _addIncomingMessage(Map<String, dynamic> messageData) {
+    try {
+      final newMessage = MessageModel(
+        id:
+            messageData['id']?.toString() ??
+            DateTime.now().millisecondsSinceEpoch.toString(),
+        chatId: widget.chatModel?.id ?? '',
+        senderId: messageData['sourceId'] ?? '',
+        message: messageData['message'] ?? '',
+        timestamp: DateTime.now(),
+        isMe: false,
+        messageType: messageData['messageType'] ?? 'text',
+        path: messageData['path'] ?? '',
+        time: _formatTime(DateTime.now().toIso8601String()),
+      );
+
+      setState(() {
+        // Check if message already exists to avoid duplicates
+        bool messageExists = messages.any((msg) => msg.id == newMessage.id);
+        if (!messageExists) {
+          messages.add(newMessage);
+          lastMessageId = newMessage.id;
+        }
+      });
+
+      // Auto-scroll to bottom
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollToBottom();
+      });
+
+      print("✅ Added real-time message to UI");
+    } catch (e) {
+      print("❌ Error adding incoming message: $e");
+    }
+  }
+
+  void _handleMessageSentConfirmation(Map<String, dynamic> data) {
+    print("📬 Message sent confirmation: $data");
+    // You can update message status here if needed
+    // For example, mark message as delivered
+  }
+
+  void _handleMessageDelivered(Map<String, dynamic> data) {
+    print("📬 Message delivered: $data");
+    // Update the message status to delivered in the UI
+    setState(() {
+      // Find the message and update its status
+      var message = messages.firstWhere(
+        (msg) => msg.id == data['messageId'],
+        orElse: () => MessageModel(
+          id: '',
+          message: '',
+          senderId: '',
+          chatId: '',
+          timestamp: DateTime.now(),
+          isMe: false,
+          path: '',
+        ),
+      );
+      if (message.id.isNotEmpty) {
+        message.isDelivered = true;
+      }
+    });
+  }
+
+  void _handleMessagePending(Map<String, dynamic> data) {
+    print("⏳ Message pending: $data");
+    // Update the message status to pending in the UI
+    setState(() {
+      // Find the message and update its status
+      var message = messages.firstWhere(
+        (msg) => msg.id == data['messageId'],
+        orElse: () => MessageModel(
+          id: '',
+          message: '',
+          senderId: '',
+          chatId: '',
+          timestamp: DateTime.now(),
+          isMe: false,
+          path: '',
+        ),
+      );
+      if (message.id.isNotEmpty) {
+        message.isPending = true;
+      }
+    });
+  }
+
+  String _formatTime(String? timestamp) {
+    if (timestamp == null) return '';
+    try {
+      final DateTime dateTime = DateTime.parse(timestamp);
+      return "${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}";
+    } catch (e) {
+      return '';
+    }
   }
 
   @override
@@ -939,20 +1227,5 @@ class _IndividualPageState extends State<IndividualPage> {
         },
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    // Clean up the socket connection
-    if (socket.connected) {
-      socket.disconnect();
-    }
-    socket.dispose();
-
-    // Clean up controllers
-    textFieldController.dispose();
-    textFieldFocusNode.dispose();
-
-    super.dispose();
   }
 }

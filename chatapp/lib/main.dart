@@ -1,5 +1,5 @@
 import 'package:camera/camera.dart';
-import 'package:chatapp/Screens/welcome_screen.dart';
+import 'package:chatapp/Screens/user_selection_screen.dart';
 import 'package:chatapp/Services/database_service.dart';
 import 'package:flutter/material.dart';
 
@@ -30,7 +30,7 @@ class MyApp extends StatelessWidget {
           secondary: Color(0xff128C7E),
         ),
       ),
-      home: WelcomeScreen(),
+      home: UserSelectionScreen(),
     );
   }
 }

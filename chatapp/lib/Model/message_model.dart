@@ -1,5 +1,3 @@
-import 'package:flutter/cupertino.dart';
-
 class MessageModel {
   String id;
   String chatId;
@@ -11,6 +9,8 @@ class MessageModel {
   String messageType; // text, image, video
   String path;
   String? time;
+  bool isDelivered;
+  bool isPending;
 
   MessageModel({
     required this.id,
@@ -23,6 +23,8 @@ class MessageModel {
     this.messageType = 'text',
     required this.path,
     this.time,
+    this.isDelivered = false,
+    this.isPending = false,
   });
 
   // Legacy constructor for backward compatibility
@@ -41,6 +43,8 @@ class MessageModel {
          messageType: type ?? 'text',
          path: path,
          time: time,
+         isDelivered: false,
+         isPending: false,
        );
 
   Map<String, dynamic> toMap() {
@@ -54,6 +58,8 @@ class MessageModel {
       'isRead': isRead ? 1 : 0,
       'messageType': messageType,
       'path': path,
+      'isDelivered': isDelivered ? 1 : 0,
+      'isPending': isPending ? 1 : 0,
     };
   }
 
@@ -68,6 +74,8 @@ class MessageModel {
       isRead: map['isRead'] == 1,
       messageType: map['messageType'] ?? 'text',
       path: map['path'] ?? '',
+      isDelivered: map['isDelivered'] == 1,
+      isPending: map['isPending'] == 1,
     );
   }
 }

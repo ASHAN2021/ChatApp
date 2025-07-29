@@ -11,7 +11,6 @@ const io = socketIo(server, {
   },
 });
 
-// Store connected users and rooms
 const users = new Map();
 const rooms = new Map();
 

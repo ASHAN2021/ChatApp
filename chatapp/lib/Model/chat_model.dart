@@ -9,6 +9,7 @@ class ChatModel {
   bool select;
   bool isGroup;
   String? time;
+  int unreadCount;
 
   ChatModel({
     required this.id,
@@ -21,6 +22,7 @@ class ChatModel {
     this.select = false,
     this.isGroup = false,
     this.time,
+    this.unreadCount = 0,
   });
 
   Map<String, dynamic> toMap() {
@@ -32,6 +34,7 @@ class ChatModel {
       'profileImage': profileImage,
       'isOnline': isOnline ? 1 : 0,
       'isGroup': isGroup ? 1 : 0,
+      'unreadCount': unreadCount,
     };
   }
 
@@ -47,6 +50,7 @@ class ChatModel {
       profileImage: map['profileImage'] ?? '',
       isOnline: map['isOnline'] == 1,
       isGroup: (map['isGroup'] ?? 0) == 1, // Handle null values
+      unreadCount: map['unreadCount'] ?? 0,
       time:
           "${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}",
     );

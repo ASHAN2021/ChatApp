@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Chat Server Test</title>
+</head>
+<body>
+    <h1>Chat Server Connection Test</h1>
+    <div id="status">Connecting...</div>
+    <input type="text" id="messageInput" placeholder="Type a message">
+    <button onclick="sendMessage()">Send</button>
+    <div id="messages"></div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const statusDiv = document.getElementById('status');
+        const messagesDiv = document.getElementById('messages');
+
+        socket.on('connect', () => {
+            statusDiv.innerHTML = '✅ Connected to server';
+            statusDiv.style.color = 'green';
+            
+            // Sign in as test user
+            socket.emit('signin', 'test_user');
+        });
+
+        socket.on('disconnect', () => {
+            statusDiv.innerHTML = '❌ Disconnected from server';
+            statusDiv.style.color = 'red';
+        });
+
+        socket.on('message', (data) => {
+            const messageDiv = document.createElement('div');
+            messageDiv.innerHTML = `📨 Message: ${data.message}`;
+            messagesDiv.appendChild(messageDiv);
+        });
+
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value;
+            if (message) {
+                socket.emit('message', {
+                    message: message,
+                    sourceId: 'test_user',
+                    targetId: 'user_001',
+                    messageType: 'text'
+                });
+                input.value = '';
+            }
+        }
+    </script>
+</body>
+</html>
