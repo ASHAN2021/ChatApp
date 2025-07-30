@@ -261,6 +261,14 @@ io.on("connection", (socket) => {
               deliveredAt: new Date().toISOString(),
               status: "delivered"
             });
+
+            // Emit unread count update to target user for chat list refresh
+            io.to(targetSocketId).emit("newMessageNotification", {
+              fromUserId: sourceId,
+              message: message,
+              timestamp: new Date().toISOString(),
+              conversationId: `${sourceId}_${targetId}`
+            });
             
           } else {
             console.log("❌ Target user not online:", targetId);
@@ -293,6 +301,38 @@ io.on("connection", (socket) => {
           if (senderSocketId) {
             io.to(senderSocketId).emit("messageRead", { messageId, readBy: userId });
           }
+        }
+      }
+    );
+  });
+
+  // Handle entire chat marked as read
+  socket.on("chatMarkedAsRead", (data) => {
+    console.log("📖 Chat marked as read:", data);
+    const { userId, otherUserId } = data;
+    
+    // Update all unread messages in this conversation
+    db.run(
+      "UPDATE messages SET isRead = 1 WHERE targetId = ? AND sourceId = ? AND isRead = 0",
+      [userId, otherUserId],
+      function(err) {
+        if (!err) {
+          console.log(`✅ Marked ${this.changes} messages as read in chat ${userId} <-> ${otherUserId}`);
+          
+          // Emit unread count update to all connected clients for this conversation
+          const conversationUsers = [userId, otherUserId];
+          conversationUsers.forEach(user => {
+            const userSocketId = users.get(user);
+            if (userSocketId) {
+              // Emit updated unread counts to refresh chat lists
+              io.to(userSocketId).emit("unreadCountUpdated", {
+                conversationWith: user === userId ? otherUserId : userId,
+                newCount: user === userId ? 0 : undefined // Only update for the user who marked as read
+              });
+            }
+          });
+        } else {
+          console.error("❌ Error marking chat as read:", err);
         }
       }
     );
@@ -428,7 +468,15 @@ app.get("/api/conversations/:userId", (req, res) => {
        u.isOnline,
        u.lastSeen,
        c.lastMessage,
-       c.lastMessageTime
+       c.lastMessageTime,
+       (SELECT COUNT(*) 
+        FROM messages m 
+        WHERE m.targetId = ? AND m.sourceId = (
+          CASE 
+            WHEN c.user1Id = ? THEN c.user2Id 
+            ELSE c.user1Id 
+          END
+        ) AND m.isRead = 0) as unreadCount
      FROM conversations c
      JOIN users u ON (
        CASE 
@@ -438,12 +486,39 @@ app.get("/api/conversations/:userId", (req, res) => {
      )
      WHERE c.user1Id = ? OR c.user2Id = ?
      ORDER BY c.lastMessageTime DESC`,
-    [userId, userId, userId, userId],
+    [userId, userId, userId, userId, userId, userId],
     (err, rows) => {
       if (err) {
         res.status(500).json({ error: err.message });
       } else {
         res.json(rows);
+      }
+    }
+  );
+});
+
+// Mark all messages as read when user enters a chat
+app.post("/api/markChatAsRead", (req, res) => {
+  const { userId, otherUserId } = req.body;
+  
+  if (!userId || !otherUserId) {
+    return res.status(400).json({ error: "Missing userId or otherUserId" });
+  }
+
+  db.run(
+    "UPDATE messages SET isRead = 1 WHERE targetId = ? AND sourceId = ? AND isRead = 0",
+    [userId, otherUserId],
+    function(err) {
+      if (err) {
+        console.error("❌ Error marking messages as read:", err);
+        res.status(500).json({ error: err.message });
+      } else {
+        console.log(`✅ Marked ${this.changes} messages as read for conversation ${otherUserId} -> ${userId}`);
+        res.json({ 
+          success: true, 
+          markedAsRead: this.changes,
+          message: `Marked ${this.changes} messages as read`
+        });
       }
     }
   );

@@ -6,6 +6,7 @@ import 'package:chatapp/Model/user_model.dart';
 import 'package:chatapp/Screens/individual_page.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:socket_io_client/socket_io_client.dart' as IO;
 
 class ChatPage extends StatefulWidget {
   const ChatPage({super.key, this.chats, this.sourceChat, this.currentUser});
@@ -23,6 +24,8 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   bool isLoading = true;
   String? error;
   Timer? _refreshTimer;
+  late IO.Socket socket;
+  bool isSocketConnected = false;
 
   @override
   void initState() {
@@ -32,12 +35,68 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       loadAvailableUsers();
       loadConversations();
       _startPeriodicRefresh(); // Add periodic refresh
+      _initSocket(); // Initialize socket connection
     }
+  }
+
+  void _initSocket() {
+    // Configure and connect the socket
+    socket = IO.io('http://10.0.2.2:8000', <String, dynamic>{
+      'transports': ['websocket', 'polling'],
+      'autoConnect': false,
+    });
+
+    socket.onConnect((_) {
+      print('✅ Chat list socket connected');
+      setState(() {
+        isSocketConnected = true;
+      });
+      
+      // Sign in with current user to receive notifications
+      socket.emit('signin', widget.currentUser!.id);
+    });
+
+    socket.onDisconnect((_) {
+      print('🔌 Chat list socket disconnected');
+      setState(() {
+        isSocketConnected = false;
+      });
+    });
+
+    // Listen for new message notifications to update unread counts
+    socket.on('newMessageNotification', (data) {
+      print('🔔 New message notification: $data');
+      // Refresh conversations to get updated unread counts
+      loadConversations();
+    });
+
+    // Listen for unread count updates
+    socket.on('unreadCountUpdated', (data) {
+      print('📊 Unread count updated: $data');
+      // Refresh conversations to reflect the changes
+      loadConversations();
+    });
+
+    // Listen for when someone comes online/offline
+    socket.on('userOnline', (data) {
+      print('👤 User came online: $data');
+      loadConversations(); // Refresh to update online status
+    });
+
+    socket.on('userOffline', (data) {
+      print('👤 User went offline: $data');
+      loadConversations(); // Refresh to update online status
+    });
+
+    socket.connect();
   }
 
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    if (isSocketConnected) {
+      socket.disconnect();
+    }
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -166,6 +225,42 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
     });
   }
 
+  // Mark chat as read when user is about to open a chat
+  Future<void> _markChatAsReadBeforeOpening(String userId, String otherUserId) async {
+    try {
+      print("📖 Marking chat as read before opening: $userId <-> $otherUserId");
+      
+      final response = await http.post(
+        Uri.parse("http://10.0.2.2:8000/api/markChatAsRead"),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'userId': userId,
+          'otherUserId': otherUserId,
+        }),
+      ).timeout(Duration(seconds: 3));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        print("✅ Chat marked as read before opening: ${data['message']}");
+        
+        // Emit socket event for real-time updates
+        if (isSocketConnected) {
+          socket.emit('chatMarkedAsRead', {
+            'userId': userId,
+            'otherUserId': otherUserId,
+          });
+        }
+        
+        // Immediately refresh conversations to show updated unread count
+        loadConversations();
+      } else {
+        print("❌ Failed to mark chat as read before opening. Status: ${response.statusCode}");
+      }
+    } catch (e) {
+      print("❌ Error marking chat as read before opening: $e");
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (widget.currentUser == null) {
@@ -271,7 +366,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                             return ConversationCard(
                               conversation: conversation,
                               currentUser: widget.currentUser!,
-                              onTap: () {
+                              onTap: () async {
                                 final otherUser = UserModel(
                                   id: conversation['otherUserId'],
                                   name: conversation['otherUserName'],
@@ -282,6 +377,10 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                                   mobile: conversation['otherUserMobile'] ?? '',
                                   isOnline: (conversation['otherUserIsOnline'] ?? 0) == 1,
                                 );
+                                
+                                // Mark chat as read before opening (preemptive)
+                                await _markChatAsReadBeforeOpening(widget.currentUser!.id, otherUser.id);
+                                
                                 startChatWithUser(otherUser);
                               },
                             );

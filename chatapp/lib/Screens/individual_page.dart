@@ -47,6 +47,8 @@ class _IndividualPageState extends State<IndividualPage> {
   void initState() {
     super.initState();
     loadMessageHistory();
+    // Mark chat as read when user enters
+    markChatAsRead();
     connect();
     _startAutoRefresh();
 
@@ -159,6 +161,46 @@ class _IndividualPageState extends State<IndividualPage> {
       }
     } catch (e) {
       print("❌ Error loading message history: $e");
+    }
+  }
+
+  // Mark chat as read when user enters the chat
+  Future<void> markChatAsRead() async {
+    if (widget.sourceChat?.id == null || widget.chatModel?.id == null) {
+      print("❌ Cannot mark chat as read - missing user IDs");
+      return;
+    }
+
+    try {
+      print("📖 Marking chat as read for ${widget.sourceChat!.id} <-> ${widget.chatModel!.id}");
+      
+      String serverUrl = "http://10.0.2.2:8000";
+
+      final response = await http.post(
+        Uri.parse("$serverUrl/api/markChatAsRead"),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'userId': widget.sourceChat!.id,
+          'otherUserId': widget.chatModel!.id,
+        }),
+      ).timeout(Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        print("✅ Chat marked as read: ${data['message']}");
+        
+        // Emit socket event to notify other clients of read status
+        if (isSocketConnected) {
+          socket.emit('chatMarkedAsRead', {
+            'userId': widget.sourceChat!.id,
+            'otherUserId': widget.chatModel!.id,
+          });
+        }
+      } else {
+        print("❌ Failed to mark chat as read. Status: ${response.statusCode}");
+      }
+    } catch (e) {
+      print("❌ Error marking chat as read: $e");
     }
   }
 
