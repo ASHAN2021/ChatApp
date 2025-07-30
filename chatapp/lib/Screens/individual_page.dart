@@ -38,8 +38,10 @@ class _IndividualPageState extends State<IndividualPage> {
   XFile? file;
   int popTime = 0;
   Timer? _refreshTimer;
+  ScrollController _scrollController = ScrollController();
   Timer? _messageCheckTimer;
   String lastMessageId = "";
+  Timer? _heartbeatTimer;
 
   @override
   void initState() {
@@ -106,6 +108,7 @@ class _IndividualPageState extends State<IndividualPage> {
   void dispose() {
     _refreshTimer?.cancel();
     _messageCheckTimer?.cancel();
+    _heartbeatTimer?.cancel();
     socket.dispose();
     textFieldController.dispose();
     textFieldFocusNode.dispose();
@@ -121,41 +124,26 @@ class _IndividualPageState extends State<IndividualPage> {
     try {
       print("🔄 Loading message history...");
 
-      // Try multiple server addresses
-      List<String> serverAddresses = [
-        "http://10.0.2.2:8000", // Android emulator
-        "http://localhost:8000", // iOS simulator
-        "http://127.0.0.1:8000", // Localhost
-        "http://192.168.1.5:8000", // Current Wi-Fi IP
-        "http://192.168.2.1:8000", // Alternative IP
-      ];
+      // Use the same server address that works (emulator address)
+      String serverUrl = "http://10.0.2.2:8000";
 
-      http.Response? response;
+      print("🔄 Loading messages from: $serverUrl");
+      final response = await http
+          .get(
+            Uri.parse(
+              "$serverUrl/api/messages/${widget.sourceChat!.id}/${widget.chatModel!.id}",
+            ),
+            headers: {'Content-Type': 'application/json'},
+          )
+          .timeout(Duration(seconds: 10));
 
-      for (String url in serverAddresses) {
-        try {
-          print("🔄 Trying to load messages from: $url");
-          response = await http
-              .get(
-                Uri.parse(
-                  "$url/api/messages/${widget.sourceChat!.id}/${widget.chatModel!.id}",
-                ),
-                headers: {'Content-Type': 'application/json'},
-              )
-              .timeout(Duration(seconds: 5));
-
-          if (response.statusCode == 200) {
-            print("✅ Successfully loaded messages from: $url");
-            break;
-          }
-        } catch (e) {
-          print("❌ Failed to load messages from $url: $e");
-          continue;
-        }
-      }
-
-      if (response != null && response.statusCode == 200) {
+      if (response.statusCode == 200) {
+        print("✅ Successfully loaded messages from: $serverUrl");
         final List<dynamic> messageData = json.decode(response.body);
+
+        setState(() {
+          messages.clear(); // Clear existing messages
+        });
 
         for (var msg in messageData) {
           String messageType = msg['sourceId'] == widget.sourceChat?.id
@@ -166,7 +154,8 @@ class _IndividualPageState extends State<IndividualPage> {
 
         print("📨 Loaded ${messageData.length} messages");
       } else {
-        print("❌ Failed to load message history");
+        print("❌ Failed to load messages. Status: ${response.statusCode}");
+        print("❌ Response: ${response.body}");
       }
     } catch (e) {
       print("❌ Error loading message history: $e");
@@ -175,90 +164,30 @@ class _IndividualPageState extends State<IndividualPage> {
 
   void connect() {
     print("🔄 Initializing socket connection...");
-
-    // Try different addresses based on device type
-    _connectWithFallback();
-  }
-
-  void _connectWithFallback() {
-    print("🔍 Detecting device type for optimal connection...");
     print("🔍 Source Chat ID: ${widget.sourceChat?.id}");
     print("🔍 Target Chat ID: ${widget.chatModel?.id}");
 
-    // Detect if running on emulator by checking for specific emulator characteristics
-    bool isEmulator =
-        Platform.isAndroid &&
-        (Platform.environment['ANDROID_DATA']?.contains('emulator') == true ||
-            Platform.environment['FLUTTER_TEST'] == 'true');
+    // Use the emulator address that we confirmed works for HTTP
+    String serverAddress = "http://10.0.2.2:8000";
 
-    print(
-      "🤖 Device type detected: ${isEmulator ? 'Android Emulator' : 'Physical Device'}",
-    );
-
-    // Reorder addresses based on device type for better success rate
-    List<String> serverAddresses;
-
-    if (isEmulator) {
-      // For emulator, prioritize emulator-specific addresses
-      serverAddresses = [
-        "http://10.0.2.2:8000", // Primary emulator address
-        "http://127.0.0.1:8000", // Loopback
-        "http://localhost:8000", // Localhost
-        "http://192.168.1.5:8000", // Current Wi-Fi IP
-        "http://192.168.2.1:8000", // Alternative IP
-      ];
-    } else {
-      // For physical devices, prioritize network addresses
-      serverAddresses = [
-        "http://192.168.1.5:8000", // Current Wi-Fi IP (best for physical devices)
-        "http://192.168.2.1:8000", // Alternative IP
-        "http://10.0.2.2:8000", // Emulator address (fallback)
-        "http://localhost:8000", // Localhost
-        "http://127.0.0.1:8000", // Loopback
-      ];
-    }
-
-    print(
-      "🌐 Will try addresses in this order for ${isEmulator ? 'emulator' : 'physical device'}:",
-    );
-    for (int i = 0; i < serverAddresses.length; i++) {
-      print("   ${i + 1}. ${serverAddresses[i]}");
-    }
-
-    _tryConnectToAddress(serverAddresses, 0);
-  }
-
-  void _tryConnectToAddress(List<String> addresses, int index) {
-    if (index >= addresses.length) {
-      print("❌ All connection attempts failed");
-      print(
-        "💡 Suggestion: Check if server is running and firewall allows port 8000",
-      );
-      setState(() {
-        isSocketConnected = false;
-      });
-      return;
-    }
-
-    String address = addresses[index];
-    print(
-      "🔄 Attempting connection ${index + 1}/${addresses.length} to: $address",
-    );
+    print("🌐 Connecting to server at: $serverAddress");
 
     socket = IO.io(
-      address,
+      serverAddress,
       IO.OptionBuilder()
           .setTransports(['websocket', 'polling']) // Add polling as fallback
           .enableForceNew()
           .enableAutoConnect()
-          .setTimeout(20000) // 20 seconds timeout per attempt
-          .setReconnectionAttempts(3) // More attempts for each address
-          .setReconnectionDelay(1000) // Faster retry
+          .setTimeout(10000) // 10 seconds timeout
+          .setReconnectionAttempts(3) // Reduce attempts for faster feedback
+          .setReconnectionDelay(2000) // 2 seconds retry delay
+          .enableReconnection()
           .build(),
     );
 
+    // Enhanced connection handling
     socket.onConnect((_) {
-      print("✅ Socket connected with ID: ${socket.id} to $address");
+      print("✅ Socket connected with ID: ${socket.id} to $serverAddress");
       print("📝 Signing in with sourceId: ${widget.sourceChat?.id}");
       print("🎯 Target will be: ${widget.chatModel?.id}");
       setState(() {
@@ -267,14 +196,45 @@ class _IndividualPageState extends State<IndividualPage> {
       socket.emit("signin", widget.sourceChat?.id);
     });
 
-    // Set up message listener outside of onConnect to avoid multiple registrations
-    socket.on("message", (msg) {
+    // Listen for connection acknowledgment
+    socket.on("connected", (data) {
+      print("🎉 Connection acknowledged: $data");
+    });
+
+    // Listen for signin success
+    socket.on("signinSuccess", (data) {
+      print("✅ Signin successful: $data");
+      // Send heartbeat to maintain connection
+      _startHeartbeat();
+    });
+
+    // Listen for signin errors
+    socket.on("signinError", (data) {
+      print("❌ Signin error: $data");
+    });
+
+    // Listen for online users list
+    socket.on("onlineUsers", (data) {
+      print("👥 Online users: $data");
+    });
+
+    // Enhanced message received handler
+    socket.on("messageReceived", (msg) {
       print("📨 Real-time message received: $msg");
       try {
         if (msg != null && msg['message'] != null) {
           print("✅ Processing real-time message: ${msg['message']}");
           // Add message to UI immediately for real-time update
           _addIncomingMessage(msg);
+
+          // Send read confirmation if this chat is active
+          if (mounted) {
+            socket.emit("markAsRead", {
+              "messageId": msg['id'],
+              "userId": widget.sourceChat?.id,
+              "senderId": msg['sourceId'],
+            });
+          }
         } else {
           print("❌ Invalid message format received");
         }
@@ -322,29 +282,32 @@ class _IndividualPageState extends State<IndividualPage> {
     });
 
     socket.onConnectError((data) {
-      print("❌ Connect Error to $address: $data");
-      socket.dispose();
-
-      // Try next address after a short delay
-      Future.delayed(Duration(milliseconds: 1000), () {
-        _tryConnectToAddress(addresses, index + 1);
+      print("❌ Connect Error to $serverAddress: $data");
+      setState(() {
+        isSocketConnected = false;
+      });
+      // Try to reconnect after a short delay
+      Future.delayed(Duration(seconds: 3), () {
+        if (!isSocketConnected && mounted) {
+          print("🔄 Retrying connection...");
+          connect();
+        }
       });
     });
 
     socket.onError((data) {
-      print("❌ Socket Error on $address: $data");
-      // Don't change connection state here, let onConnectError handle it
+      print("❌ Socket Error on $serverAddress: $data");
     });
 
     socket.onDisconnect((_) {
-      print("🔌 Socket disconnected from $address");
+      print("🔌 Socket disconnected from $serverAddress");
       setState(() {
         isSocketConnected = false;
       });
     });
 
     socket.onReconnect((_) {
-      print("🔄 Socket reconnected to $address");
+      print("🔄 Socket reconnected to $serverAddress");
       setState(() {
         isSocketConnected = true;
       });
@@ -352,7 +315,7 @@ class _IndividualPageState extends State<IndividualPage> {
     });
 
     socket.connect();
-    print("🔄 Connecting to socket at $address...");
+    print("🔄 Connecting to socket at $serverAddress...");
   }
 
   void _reconnectSocket() {
@@ -368,33 +331,6 @@ class _IndividualPageState extends State<IndividualPage> {
     // Wait a moment then reconnect
     Future.delayed(Duration(milliseconds: 500), () {
       connect();
-    });
-  }
-
-  void _connectAsEmulator() {
-    print("🤖 Forcing emulator connection mode...");
-    setState(() {
-      isSocketConnected = false;
-    });
-
-    if (socket.connected) {
-      socket.disconnect();
-    }
-
-    // Force emulator connection with priority order
-    List<String> emulatorAddresses = [
-      "http://10.0.2.2:8000",
-      "http://127.0.0.1:8000",
-      "http://localhost:8000",
-    ];
-
-    print("🌐 Forcing emulator addresses:");
-    for (int i = 0; i < emulatorAddresses.length; i++) {
-      print("   ${i + 1}. ${emulatorAddresses[i]}");
-    }
-
-    Future.delayed(Duration(milliseconds: 500), () {
-      _tryConnectToAddress(emulatorAddresses, 0);
     });
   }
 
@@ -617,67 +553,82 @@ class _IndividualPageState extends State<IndividualPage> {
     });
   }
 
-  void _addIncomingMessage(Map<String, dynamic> messageData) {
+  // Heartbeat to maintain socket connection
+  void _startHeartbeat() {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = Timer.periodic(Duration(seconds: 30), (timer) {
+      if (socket.connected) {
+        socket.emit("heartbeat");
+      }
+    });
+  }
+
+  // Handle typing indicator
+
+  // Enhanced message adding with better UI updates
+  void _addIncomingMessage(Map<String, dynamic> msg) {
     try {
-      final newMessage = MessageModel(
-        id:
-            messageData['id']?.toString() ??
-            DateTime.now().millisecondsSinceEpoch.toString(),
-        chatId: widget.chatModel?.id ?? '',
-        senderId: messageData['sourceId'] ?? '',
-        message: messageData['message'] ?? '',
-        timestamp: DateTime.now(),
-        isMe: false,
-        messageType: messageData['messageType'] ?? 'text',
-        path: messageData['path'] ?? '',
-        time: _formatTime(DateTime.now().toIso8601String()),
-      );
+      String messageContent = msg['message'] ?? '';
+      String messageType = msg['sourceId'] == widget.sourceChat?.id
+          ? "source"
+          : "destination";
+      String path = msg['path'] ?? '';
 
+      // Add to messages list immediately for real-time UI update
       setState(() {
-        // Check if message already exists to avoid duplicates
-        bool messageExists = messages.any((msg) => msg.id == newMessage.id);
-        if (!messageExists) {
-          messages.add(newMessage);
-          lastMessageId = newMessage.id;
-        }
+        messages.add(
+          MessageModel(
+            id:
+                msg['id']?.toString() ??
+                DateTime.now().millisecondsSinceEpoch.toString(),
+            chatId: '${widget.sourceChat?.id}_${widget.chatModel?.id}',
+            senderId: msg['sourceId'] ?? '',
+            message: messageContent,
+            timestamp: DateTime.now(),
+            isMe: messageType == "source",
+            messageType: msg['messageType'] ?? 'text',
+            path: path,
+            isDelivered: true,
+          ),
+        );
       });
 
-      // Auto-scroll to bottom
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _scrollToBottom();
-      });
+      // Scroll to the bottom to show new message
+      _scrollToBottom();
 
-      print("✅ Added real-time message to UI");
+      print("✅ Message added to UI: $messageContent");
     } catch (e) {
       print("❌ Error adding incoming message: $e");
     }
   }
 
+  // Handle message sent confirmation
   void _handleMessageSentConfirmation(Map<String, dynamic> data) {
-    print("📬 Message sent confirmation: $data");
-    // You can update message status here if needed
-    // For example, mark message as delivered
+    print("✅ Message sent successfully: $data");
+    // Update UI to show message as sent
+    setState(() {
+      // Find and update the message status
+      for (var message in messages) {
+        if (message.id == data['id']?.toString()) {
+          message.isPending = false;
+          break;
+        }
+      }
+    });
   }
 
+  // Handle message delivered confirmation
   void _handleMessageDelivered(Map<String, dynamic> data) {
     print("📬 Message delivered: $data");
     // Update the message status to delivered in the UI
     setState(() {
       // Find the message and update its status
-      var message = messages.firstWhere(
-        (msg) => msg.id == data['messageId'],
-        orElse: () => MessageModel(
-          id: '',
-          message: '',
-          senderId: '',
-          chatId: '',
-          timestamp: DateTime.now(),
-          isMe: false,
-          path: '',
-        ),
-      );
-      if (message.id.isNotEmpty) {
-        message.isDelivered = true;
+      for (var message in messages) {
+        if (message.id == data['messageId']?.toString()) {
+          message.isDelivered = true;
+          message.isPending = false;
+          break;
+        }
       }
     });
   }
@@ -687,20 +638,12 @@ class _IndividualPageState extends State<IndividualPage> {
     // Update the message status to pending in the UI
     setState(() {
       // Find the message and update its status
-      var message = messages.firstWhere(
-        (msg) => msg.id == data['messageId'],
-        orElse: () => MessageModel(
-          id: '',
-          message: '',
-          senderId: '',
-          chatId: '',
-          timestamp: DateTime.now(),
-          isMe: false,
-          path: '',
-        ),
-      );
-      if (message.id.isNotEmpty) {
-        message.isPending = true;
+      for (var message in messages) {
+        if (message.id == data['messageId']?.toString()) {
+          message.isPending = true;
+          message.isDelivered = false;
+          break;
+        }
       }
     });
   }
@@ -708,7 +651,7 @@ class _IndividualPageState extends State<IndividualPage> {
   String _formatTime(String? timestamp) {
     if (timestamp == null) return '';
     try {
-      final DateTime dateTime = DateTime.parse(timestamp);
+      DateTime dateTime = DateTime.parse(timestamp);
       return "${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}";
     } catch (e) {
       return '';
@@ -807,8 +750,6 @@ class _IndividualPageState extends State<IndividualPage> {
                     _reconnectSocket();
                   } else if (value == "Test Connection") {
                     _testServerConnection();
-                  } else if (value == "Force Emulator Mode") {
-                    _connectAsEmulator();
                   } else if (value == "Check Server Status") {
                     _checkServerUsers();
                   }
@@ -840,16 +781,6 @@ class _IndividualPageState extends State<IndividualPage> {
                         ],
                       ),
                       value: "Test Connection",
-                    ),
-                    PopupMenuItem(
-                      child: Row(
-                        children: [
-                          Icon(Icons.android, color: Colors.green, size: 20),
-                          SizedBox(width: 8),
-                          Text('Force Emulator Mode'),
-                        ],
-                      ),
-                      value: "Force Emulator Mode",
                     ),
                     PopupMenuItem(
                       child: Row(

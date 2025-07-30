@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:socket_io_client/socket_io_client.dart' as IO;
 import '../Model/user_model.dart';
 import 'home_screen.dart';
 
@@ -15,11 +16,85 @@ class _UserSelectionScreenState extends State<UserSelectionScreen> {
   List<UserModel> users = [];
   bool isLoading = true;
   String? error;
+  IO.Socket? testSocket;
+
+  late IO.Socket socket;
 
   @override
   void initState() {
     super.initState();
     loadUsers();
+    initializeSocket();
+    testSocketConnection(); // Add socket test
+  }
+
+  void initializeSocket() {
+    // Configure the socket instance
+    socket = IO.io('http://10.0.2.2:8000', <String, dynamic>{
+      'transports': ['websocket'],
+      'autoConnect': false,
+    });
+
+    // Connect to the socket server
+    socket.connect();
+
+    // Handle socket connection
+    socket.onConnect((_) {
+      print('✅ Socket connected');
+    });
+
+    // Handle socket disconnection
+    socket.onDisconnect((_) {
+      print('❌ Socket disconnected');
+    });
+
+    // Handle socket connection error
+    socket.onError((error) {
+      print('❌ Socket error: $error');
+    });
+  }
+
+  void testSocketConnection() async {
+    print("🧪 Testing Socket.io connection from user selection screen...");
+
+    try {
+      String serverAddress = "http://10.0.2.2:8000";
+
+      testSocket = IO.io(
+        serverAddress,
+        IO.OptionBuilder()
+            .setTransports(['websocket', 'polling'])
+            .enableForceNew()
+            .enableAutoConnect()
+            .setTimeout(5000)
+            .build(),
+      );
+
+      testSocket!.onConnect((_) {
+        print("✅ TEST: Socket connected with ID: ${testSocket!.id}");
+
+        // Test signin
+        testSocket!.emit("signin", "testuser");
+      });
+
+      testSocket!.onConnectError((error) {
+        print("❌ TEST: Socket connection error: $error");
+      });
+
+      testSocket!.on("signinSuccess", (data) {
+        print("✅ TEST: Signin successful: $data");
+
+        // Disconnect after successful test
+        Future.delayed(Duration(seconds: 2), () {
+          testSocket?.disconnect();
+          print("✅ TEST: Socket test completed successfully!");
+        });
+      });
+
+      testSocket!.connect();
+    } catch (e) {
+      print("❌ TEST: Socket test failed: $e");
+    }
   }
 
   Future<void> loadUsers() async {
