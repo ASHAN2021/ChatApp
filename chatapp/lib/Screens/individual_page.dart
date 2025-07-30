@@ -172,23 +172,27 @@ class _IndividualPageState extends State<IndividualPage> {
     }
 
     try {
-      print("📖 Marking chat as read for ${widget.sourceChat!.id} <-> ${widget.chatModel!.id}");
-      
+      print(
+        "📖 Marking chat as read for ${widget.sourceChat!.id} <-> ${widget.chatModel!.id}",
+      );
+
       String serverUrl = "http://10.0.2.2:8000";
 
-      final response = await http.post(
-        Uri.parse("$serverUrl/api/markChatAsRead"),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({
-          'userId': widget.sourceChat!.id,
-          'otherUserId': widget.chatModel!.id,
-        }),
-      ).timeout(Duration(seconds: 5));
+      final response = await http
+          .post(
+            Uri.parse("$serverUrl/api/markChatAsRead"),
+            headers: {'Content-Type': 'application/json'},
+            body: json.encode({
+              'userId': widget.sourceChat!.id,
+              'otherUserId': widget.chatModel!.id,
+            }),
+          )
+          .timeout(Duration(seconds: 5));
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         print("✅ Chat marked as read: ${data['message']}");
-        
+
         // Emit socket event to notify other clients of read status
         if (isSocketConnected) {
           socket.emit('chatMarkedAsRead', {

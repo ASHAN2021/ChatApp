@@ -51,7 +51,7 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
       setState(() {
         isSocketConnected = true;
       });
-      
+
       // Sign in with current user to receive notifications
       socket.emit('signin', widget.currentUser!.id);
     });
@@ -226,23 +226,25 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   }
 
   // Mark chat as read when user is about to open a chat
-  Future<void> _markChatAsReadBeforeOpening(String userId, String otherUserId) async {
+  Future<void> _markChatAsReadBeforeOpening(
+    String userId,
+    String otherUserId,
+  ) async {
     try {
       print("📖 Marking chat as read before opening: $userId <-> $otherUserId");
-      
-      final response = await http.post(
-        Uri.parse("http://10.0.2.2:8000/api/markChatAsRead"),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({
-          'userId': userId,
-          'otherUserId': otherUserId,
-        }),
-      ).timeout(Duration(seconds: 3));
+
+      final response = await http
+          .post(
+            Uri.parse("http://10.0.2.2:8000/api/markChatAsRead"),
+            headers: {'Content-Type': 'application/json'},
+            body: json.encode({'userId': userId, 'otherUserId': otherUserId}),
+          )
+          .timeout(Duration(seconds: 3));
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         print("✅ Chat marked as read before opening: ${data['message']}");
-        
+
         // Emit socket event for real-time updates
         if (isSocketConnected) {
           socket.emit('chatMarkedAsRead', {
@@ -250,11 +252,13 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
             'otherUserId': otherUserId,
           });
         }
-        
+
         // Immediately refresh conversations to show updated unread count
         loadConversations();
       } else {
-        print("❌ Failed to mark chat as read before opening. Status: ${response.statusCode}");
+        print(
+          "❌ Failed to mark chat as read before opening. Status: ${response.statusCode}",
+        );
       }
     } catch (e) {
       print("❌ Error marking chat as read before opening: $e");
@@ -315,78 +319,82 @@ class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
                 ),
               )
             : error != null
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.error_outline, size: 64, color: Colors.red),
-                        SizedBox(height: 16),
-                        Text(
-                          'Error: $error',
-                          style: TextStyle(color: Colors.red),
-                          textAlign: TextAlign.center,
-                        ),
-                        SizedBox(height: 16),
-                        ElevatedButton(
-                          onPressed: loadConversations,
-                          child: Text('Retry'),
-                        ),
-                      ],
+            ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.error_outline, size: 64, color: Colors.red),
+                    SizedBox(height: 16),
+                    Text(
+                      'Error: $error',
+                      style: TextStyle(color: Colors.red),
+                      textAlign: TextAlign.center,
                     ),
-                  )
-                : conversations.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.chat_bubble_outline,
-                              size: 64,
-                              color: Colors.grey,
-                            ),
-                            SizedBox(height: 16),
-                            Text(
-                              'No conversations yet',
-                              style: TextStyle(fontSize: 18, color: Colors.grey),
-                            ),
-                            SizedBox(height: 8),
-                            Text(
-                              'Tap the + button to start a new chat',
-                              style: TextStyle(fontSize: 14, color: Colors.grey),
-                            ),
-                          ],
-                        ),
-                      )
-                    : RefreshIndicator(
-                        onRefresh: loadConversations,
-                        child: ListView.builder(
-                          itemCount: conversations.length,
-                          itemBuilder: (context, index) {
-                            final conversation = conversations[index];
-                            return ConversationCard(
-                              conversation: conversation,
-                              currentUser: widget.currentUser!,
-                              onTap: () async {
-                                final otherUser = UserModel(
-                                  id: conversation['otherUserId'],
-                                  name: conversation['otherUserName'],
-                                  profileImage:
-                                      conversation['otherUserProfileImage'] ?? '',
-                                  qrCode: '',
-                                  createdAt: DateTime.now(),
-                                  mobile: conversation['otherUserMobile'] ?? '',
-                                  isOnline: (conversation['otherUserIsOnline'] ?? 0) == 1,
-                                );
-                                
-                                // Mark chat as read before opening (preemptive)
-                                await _markChatAsReadBeforeOpening(widget.currentUser!.id, otherUser.id);
-                                
-                                startChatWithUser(otherUser);
-                              },
-                            );
-                          },
-                        ),
-                      ), // Close RefreshIndicator
+                    SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: loadConversations,
+                      child: Text('Retry'),
+                    ),
+                  ],
+                ),
+              )
+            : conversations.isEmpty
+            ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.chat_bubble_outline,
+                      size: 64,
+                      color: Colors.grey,
+                    ),
+                    SizedBox(height: 16),
+                    Text(
+                      'No conversations yet',
+                      style: TextStyle(fontSize: 18, color: Colors.grey),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      'Tap the + button to start a new chat',
+                      style: TextStyle(fontSize: 14, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              )
+            : RefreshIndicator(
+                onRefresh: loadConversations,
+                child: ListView.builder(
+                  itemCount: conversations.length,
+                  itemBuilder: (context, index) {
+                    final conversation = conversations[index];
+                    return ConversationCard(
+                      conversation: conversation,
+                      currentUser: widget.currentUser!,
+                      onTap: () async {
+                        final otherUser = UserModel(
+                          id: conversation['otherUserId'],
+                          name: conversation['otherUserName'],
+                          profileImage:
+                              conversation['otherUserProfileImage'] ?? '',
+                          qrCode: '',
+                          createdAt: DateTime.now(),
+                          mobile: conversation['otherUserMobile'] ?? '',
+                          isOnline:
+                              (conversation['otherUserIsOnline'] ?? 0) == 1,
+                        );
+
+                        // Mark chat as read before opening (preemptive)
+                        await _markChatAsReadBeforeOpening(
+                          widget.currentUser!.id,
+                          otherUser.id,
+                        );
+
+                        startChatWithUser(otherUser);
+                      },
+                    );
+                  },
+                ),
+              ), // Close RefreshIndicator
       ),
     );
   }
