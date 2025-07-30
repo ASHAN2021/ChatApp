@@ -2,7 +2,7 @@ const io = require('socket.io-client');
 
 console.log('🧪 Testing Socket.io connection...');
 
-// Test connection to local server
+
 const socket = io('http://192.168.2.1:8000', {
     transports: ['websocket', 'polling'],
     forceNew: true,
@@ -12,7 +12,7 @@ const socket = io('http://192.168.2.1:8000', {
 socket.on('connect', () => {
     console.log('✅ Connected to Socket.io with ID:', socket.id);
     
-    // Test signin
+    
     console.log('📝 Testing signin with user1...');
     socket.emit('signin', 'user1');
 });
@@ -32,7 +32,7 @@ socket.on('connected', (data) => {
 socket.on('signinSuccess', (data) => {
     console.log('✅ Signin successful:', data);
     
-    // Test sending a message
+    
     const testMessage = {
         targetId: 'user2',
         sourceId: 'user1',
