@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:chatapp/Model/chat_model.dart';
 import 'package:chatapp/Model/user_model.dart';
 import 'package:chatapp/Screens/individual_page.dart';
@@ -20,6 +21,7 @@ class _ChatPageState extends State<ChatPage> {
   List<dynamic> conversations = [];
   bool isLoading = true;
   String? error;
+  Timer? _refreshTimer;
 
   @override
   void initState() {
@@ -27,7 +29,23 @@ class _ChatPageState extends State<ChatPage> {
     if (widget.currentUser != null) {
       loadAvailableUsers();
       loadConversations();
+      _startPeriodicRefresh(); // Add periodic refresh
     }
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startPeriodicRefresh() {
+    // Refresh conversations every 3 seconds to catch new messages
+    _refreshTimer = Timer.periodic(Duration(seconds: 3), (timer) {
+      if (mounted) {
+        loadConversations();
+      }
+    });
   }
 
   Future<void> loadAvailableUsers() async {
@@ -222,14 +240,16 @@ class _ChatPageState extends State<ChatPage> {
                   ],
                 ),
               )
-            : ListView.builder(
-                itemCount: conversations.length,
-                itemBuilder: (context, index) {
-                  final conversation = conversations[index];
-                  return ConversationCard(
-                    conversation: conversation,
-                    currentUser: widget.currentUser!,
-                    onTap: () {
+            : RefreshIndicator(
+                onRefresh: loadConversations,
+                child: ListView.builder(
+                  itemCount: conversations.length,
+                  itemBuilder: (context, index) {
+                    final conversation = conversations[index];
+                    return ConversationCard(
+                      conversation: conversation,
+                      currentUser: widget.currentUser!,
+                      onTap: () {
                       final otherUser = UserModel(
                         id: conversation['otherUserId'],
                         name: conversation['otherUserName'],
@@ -245,6 +265,7 @@ class _ChatPageState extends State<ChatPage> {
                   );
                 },
               ),
+            ), // Close RefreshIndicator
       ),
     );
   }
