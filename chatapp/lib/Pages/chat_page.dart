@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:async';
+import 'package:flutter/services.dart';
 import 'package:chatapp/Model/chat_model.dart';
 import 'package:chatapp/Model/user_model.dart';
 import 'package:chatapp/Screens/individual_page.dart';
@@ -16,7 +17,7 @@ class ChatPage extends StatefulWidget {
   State<ChatPage> createState() => _ChatPageState();
 }
 
-class _ChatPageState extends State<ChatPage> {
+class _ChatPageState extends State<ChatPage> with WidgetsBindingObserver {
   List<UserModel> availableUsers = [];
   List<dynamic> conversations = [];
   bool isLoading = true;
@@ -26,6 +27,7 @@ class _ChatPageState extends State<ChatPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this); // Listen to app lifecycle
     if (widget.currentUser != null) {
       loadAvailableUsers();
       loadConversations();
@@ -36,7 +38,19 @@ class _ChatPageState extends State<ChatPage> {
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+
+    // Refresh conversations when app comes back to foreground
+    if (state == AppLifecycleState.resumed && mounted) {
+      print("📱 App resumed - refreshing conversations");
+      loadConversations();
+    }
   }
 
   void _startPeriodicRefresh() {
@@ -76,9 +90,14 @@ class _ChatPageState extends State<ChatPage> {
 
     try {
       setState(() {
-        isLoading = true;
+        // Only show loading spinner if we don't have conversations yet
+        if (conversations.isEmpty) {
+          isLoading = true;
+        }
         error = null;
       });
+
+      print("🔄 Loading conversations for user: ${widget.currentUser!.id}");
 
       final response = await http
           .get(
@@ -91,22 +110,25 @@ class _ChatPageState extends State<ChatPage> {
 
       if (response.statusCode == 200) {
         final List<dynamic> conversationData = json.decode(response.body);
+        print("✅ Loaded ${conversationData.length} conversations");
+
         setState(() {
           conversations = conversationData;
           isLoading = false;
         });
       } else {
+        print("❌ Failed to load conversations. Status: ${response.statusCode}");
         setState(() {
           error = "Failed to load conversations";
           isLoading = false;
         });
       }
     } catch (e) {
+      print("❌ Error loading conversations: $e");
       setState(() {
         error = e.toString();
         isLoading = false;
       });
-      print("❌ Error loading conversations: $e");
     }
   }
 
@@ -198,74 +220,74 @@ class _ChatPageState extends State<ChatPage> {
                 ),
               )
             : error != null
-            ? Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.error_outline, size: 64, color: Colors.red),
-                    SizedBox(height: 16),
-                    Text(
-                      'Error: $error',
-                      style: TextStyle(color: Colors.red),
-                      textAlign: TextAlign.center,
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.error_outline, size: 64, color: Colors.red),
+                        SizedBox(height: 16),
+                        Text(
+                          'Error: $error',
+                          style: TextStyle(color: Colors.red),
+                          textAlign: TextAlign.center,
+                        ),
+                        SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: loadConversations,
+                          child: Text('Retry'),
+                        ),
+                      ],
                     ),
-                    SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: loadConversations,
-                      child: Text('Retry'),
-                    ),
-                  ],
-                ),
-              )
-            : conversations.isEmpty
-            ? Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.chat_bubble_outline,
-                      size: 64,
-                      color: Colors.grey,
-                    ),
-                    SizedBox(height: 16),
-                    Text(
-                      'No conversations yet',
-                      style: TextStyle(fontSize: 18, color: Colors.grey),
-                    ),
-                    SizedBox(height: 8),
-                    Text(
-                      'Tap the + button to start a new chat',
-                      style: TextStyle(fontSize: 14, color: Colors.grey),
-                    ),
-                  ],
-                ),
-              )
-            : RefreshIndicator(
-                onRefresh: loadConversations,
-                child: ListView.builder(
-                  itemCount: conversations.length,
-                  itemBuilder: (context, index) {
-                    final conversation = conversations[index];
-                    return ConversationCard(
-                      conversation: conversation,
-                      currentUser: widget.currentUser!,
-                      onTap: () {
-                      final otherUser = UserModel(
-                        id: conversation['otherUserId'],
-                        name: conversation['otherUserName'],
-                        profileImage:
-                            conversation['otherUserProfileImage'] ?? '',
-                        qrCode: '',
-                        createdAt: DateTime.now(),
-                        mobile: conversation['otherUserMobile'] ?? '',
-                        isOnline: (conversation['otherUserIsOnline'] ?? 0) == 1,
-                      );
-                      startChatWithUser(otherUser);
-                    },
-                  );
-                },
-              ),
-            ), // Close RefreshIndicator
+                  )
+                : conversations.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.chat_bubble_outline,
+                              size: 64,
+                              color: Colors.grey,
+                            ),
+                            SizedBox(height: 16),
+                            Text(
+                              'No conversations yet',
+                              style: TextStyle(fontSize: 18, color: Colors.grey),
+                            ),
+                            SizedBox(height: 8),
+                            Text(
+                              'Tap the + button to start a new chat',
+                              style: TextStyle(fontSize: 14, color: Colors.grey),
+                            ),
+                          ],
+                        ),
+                      )
+                    : RefreshIndicator(
+                        onRefresh: loadConversations,
+                        child: ListView.builder(
+                          itemCount: conversations.length,
+                          itemBuilder: (context, index) {
+                            final conversation = conversations[index];
+                            return ConversationCard(
+                              conversation: conversation,
+                              currentUser: widget.currentUser!,
+                              onTap: () {
+                                final otherUser = UserModel(
+                                  id: conversation['otherUserId'],
+                                  name: conversation['otherUserName'],
+                                  profileImage:
+                                      conversation['otherUserProfileImage'] ?? '',
+                                  qrCode: '',
+                                  createdAt: DateTime.now(),
+                                  mobile: conversation['otherUserMobile'] ?? '',
+                                  isOnline: (conversation['otherUserIsOnline'] ?? 0) == 1,
+                                );
+                                startChatWithUser(otherUser);
+                              },
+                            );
+                          },
+                        ),
+                      ), // Close RefreshIndicator
       ),
     );
   }
