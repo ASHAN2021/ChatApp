@@ -3,9 +3,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 class CameraView extends StatelessWidget {
-  const CameraView({super.key, required this.path});
+  const CameraView({super.key, required this.path, required this.onImageSend});
 
   final String path;
+  final Function onImageSend;
+  static TextEditingController _captionController = TextEditingController();
 
   @override
   Widget build(BuildContext context) {
@@ -71,6 +73,7 @@ class CameraView extends StatelessWidget {
                 padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 color: Colors.black54,
                 child: TextFormField(
+                  controller: _captionController,
                   maxLines: 6,
                   minLines: 1,
                   decoration: InputDecoration(
@@ -91,6 +94,7 @@ class CameraView extends StatelessWidget {
                         icon: Icon(Icons.check, color: Colors.white),
                         onPressed: () {
                           // Implement send functionality here
+                          onImageSend(path, _captionController.text.trim());
                         },
                       ),
                     ),

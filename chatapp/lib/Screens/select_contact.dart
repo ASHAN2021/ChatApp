@@ -15,9 +15,27 @@ class _SelectContactState extends State<SelectContact> {
   @override
   Widget build(BuildContext context) {
     List<ChatModel> contacts = [
-      ChatModel(name: 'John Doe', status: 'fullstack developer'),
-      ChatModel(name: 'John Dolton', status: 'web developer'),
-      ChatModel(name: 'John Smith', status: 'mobile developer'),
+      ChatModel(
+        id: 'contact_1',
+        name: 'John Doe',
+        lastMessage: 'fullstack developer',
+        lastMessageTime: DateTime.now(),
+        time: '18:04',
+      ),
+      ChatModel(
+        id: 'contact_2',
+        name: 'John Dolton',
+        lastMessage: 'web developer',
+        lastMessageTime: DateTime.now(),
+        time: '17:30',
+      ),
+      ChatModel(
+        id: 'contact_3',
+        name: 'John Smith',
+        lastMessage: 'mobile developer',
+        lastMessageTime: DateTime.now(),
+        time: '16:45',
+      ),
     ];
 
     return Scaffold(

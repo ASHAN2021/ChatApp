@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import '../Model/message_model.dart';
+import 'package:intl/intl.dart';
 
 class OwnMessageCard extends StatelessWidget {
-  const OwnMessageCard({super.key, this.message, this.time});
-  final String? message;
-  final String? time;
+  const OwnMessageCard({super.key, required this.message});
+  final MessageModel message;
 
   @override
   Widget build(BuildContext context) {
@@ -29,7 +30,7 @@ class OwnMessageCard extends StatelessWidget {
                   top: 10,
                   bottom: 20,
                 ),
-                child: Text(message ?? ''),
+                child: Text(message.message, style: TextStyle(fontSize: 16)),
               ),
               Positioned(
                 bottom: 4,
@@ -37,11 +38,15 @@ class OwnMessageCard extends StatelessWidget {
                 child: Row(
                   children: [
                     Text(
-                      time ?? '00:00',
+                      _formatTime(message.timestamp),
                       style: TextStyle(fontSize: 12, color: Colors.grey),
                     ),
                     SizedBox(width: 5),
-                    Icon(Icons.done_all, size: 20, color: Colors.blue),
+                    Icon(
+                      message.isRead ? Icons.done_all : Icons.done,
+                      size: 16,
+                      color: message.isRead ? Colors.blue : Colors.grey,
+                    ),
                   ],
                 ),
               ),
@@ -50,5 +55,9 @@ class OwnMessageCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _formatTime(DateTime dateTime) {
+    return DateFormat('HH:mm').format(dateTime);
   }
 }

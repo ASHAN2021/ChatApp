@@ -47,7 +47,7 @@ class ContactCard extends StatelessWidget {
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
         ),
         subtitle: Text(
-          contact?.status ?? 'No status',
+          contact?.lastMessage ?? 'No status',
           style: TextStyle(color: Colors.grey[600], fontSize: 16),
         ),
       ),

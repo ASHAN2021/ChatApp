@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Socket.IO Test</title>
+    <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
+</head>
+<body>
+    <h1>Socket.IO Connection Test</h1>
+    <div id="status">Connecting...</div>
+    <div id="messages"></div>
+    
+    <input type="text" id="messageInput" placeholder="Enter message">
+    <button onclick="sendMessage()">Send</button>
+    
+    <script>
+        const socket = io('http://localhost:8000');
+        const statusDiv = document.getElementById('status');
+        const messagesDiv = document.getElementById('messages');
+        
+        socket.on('connect', () => {
+            statusDiv.innerHTML = '✅ Connected to server! Socket ID: ' + socket.id;
+            statusDiv.style.color = 'green';
+            
+            // Sign in with test user
+            socket.emit('signin', 'test_user_1');
+        });
+        
+        socket.on('disconnect', () => {
+            statusDiv.innerHTML = '❌ Disconnected from server';
+            statusDiv.style.color = 'red';
+        });
+        
+        socket.on('connect_error', (error) => {
+            statusDiv.innerHTML = '❌ Connection error: ' + error;
+            statusDiv.style.color = 'red';
+        });
+        
+        socket.on('message', (msg) => {
+            const messageElement = document.createElement('div');
+            messageElement.innerHTML = '📨 Received: ' + JSON.stringify(msg);
+            messagesDiv.appendChild(messageElement);
+        });
+        
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            if (input.value.trim()) {
+                socket.emit('message', {
+                    targetId: 'test_user_2',
+                    sourceId: 'test_user_1',
+                    message: input.value,
+                    path: '',
+                    type: 'text'
+                });
+                
+                const messageElement = document.createElement('div');
+                messageElement.innerHTML = '📤 Sent: ' + input.value;
+                messagesDiv.appendChild(messageElement);
+                input.value = '';
+            }
+        }
+        
+        document.getElementById('messageInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>

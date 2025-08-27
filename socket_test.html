@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Socket.io Connection Test</title>
+    <script src="https://cdn.socket.io/4.4.1/socket.io.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .connected { background-color: #d4edda; color: #155724; }
+        .disconnected { background-color: #f8d7da; color: #721c24; }
+        .error { background-color: #fff3cd; color: #856404; }
+        button { padding: 10px 15px; margin: 5px; }
+        textarea { width: 100%; height: 300px; font-family: monospace; }
+    </style>
+</head>
+<body>
+    <h1>Socket.io Connection Test</h1>
+    <div id="status" class="status disconnected">Disconnected</div>
+    
+    <div>
+        <button onclick="connectSocket()">Connect</button>
+        <button onclick="disconnectSocket()">Disconnect</button>
+        <button onclick="testSignin()">Test Signin</button>
+        <button onclick="sendTestMessage()">Send Test Message</button>
+        <button onclick="clearLog()">Clear Log</button>
+    </div>
+
+    <h3>Log:</h3>
+    <textarea id="log" readonly></textarea>
+
+    <script>
+        let socket = null;
+        let isConnected = false;
+
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            const logElement = document.getElementById('log');
+            logElement.value += `[${timestamp}] ${message}\n`;
+            logElement.scrollTop = logElement.scrollHeight;
+            console.log(message);
+        }
+
+        function updateStatus(connected, message) {
+            const statusElement = document.getElementById('status');
+            isConnected = connected;
+            
+            if (connected) {
+                statusElement.className = 'status connected';
+                statusElement.textContent = `Connected: ${message}`;
+            } else {
+                statusElement.className = 'status disconnected';
+                statusElement.textContent = `Disconnected: ${message}`;
+            }
+        }
+
+        function connectSocket() {
+            if (socket && socket.connected) {
+                log('Already connected!');
+                return;
+            }
+
+            // Test both addresses (emulator and local network)
+            const addresses = [
+                'http://10.0.2.2:8000',      // Emulator address
+                'http://192.168.2.1:8000'    // Network address
+            ];
+            
+            const serverAddress = addresses[0]; // Start with emulator address
+            log(`🔄 Attempting to connect to: ${serverAddress}`);
+            
+            socket = io(serverAddress, {
+                transports: ['websocket', 'polling'],
+                forceNew: true,
+                timeout: 10000,
+                reconnectionAttempts: 3,
+                reconnectionDelay: 2000
+            });
+
+            socket.on('connect', () => {
+                log(`✅ Connected to Socket.io with ID: ${socket.id}`);
+                updateStatus(true, socket.id);
+            });
+
+            socket.on('connect_error', (error) => {
+                log(`❌ Connection Error: ${error.message}`);
+                updateStatus(false, error.message);
+            });
+
+            socket.on('disconnect', (reason) => {
+                log(`🔌 Disconnected: ${reason}`);
+                updateStatus(false, reason);
+            });
+
+            socket.on('connected', (data) => {
+                log(`🎉 Connection acknowledged: ${JSON.stringify(data)}`);
+            });
+
+            socket.on('signinSuccess', (data) => {
+                log(`✅ Signin successful: ${JSON.stringify(data)}`);
+            });
+
+            socket.on('signinError', (data) => {
+                log(`❌ Signin error: ${JSON.stringify(data)}`);
+            });
+
+            socket.on('messageReceived', (msg) => {
+                log(`📨 Message received: ${JSON.stringify(msg)}`);
+            });
+
+            socket.on('messageSent', (data) => {
+                log(`✅ Message sent confirmation: ${JSON.stringify(data)}`);
+            });
+
+            socket.on('onlineUsers', (data) => {
+                log(`👥 Online users: ${JSON.stringify(data)}`);
+            });
+        }
+
+        function disconnectSocket() {
+            if (socket) {
+                socket.disconnect();
+                socket = null;
+                log('🔌 Manually disconnected');
+                updateStatus(false, 'Manual disconnect');
+            }
+        }
+
+        function testSignin() {
+            if (!socket || !socket.connected) {
+                log('❌ Not connected! Connect first.');
+                return;
+            }
+
+            log('📝 Testing signin with user ID: user1');
+            socket.emit('signin', 'user1');
+        }
+
+        function sendTestMessage() {
+            if (!socket || !socket.connected) {
+                log('❌ Not connected! Connect first.');
+                return;
+            }
+
+            const testMessage = {
+                targetId: 'user2',
+                sourceId: 'user1',
+                message: 'Hello from web test client!',
+                type: 'text'
+            };
+
+            log(`📤 Sending test message: ${JSON.stringify(testMessage)}`);
+            socket.emit('message', testMessage);
+        }
+
+        function clearLog() {
+            document.getElementById('log').value = '';
+        }
+
+        // Auto-connect on page load
+        window.onload = function() {
+            log('🌐 Test client loaded. Click Connect to test Socket.io connection.');
+        };
+    </script>
+</body>
+</html>
