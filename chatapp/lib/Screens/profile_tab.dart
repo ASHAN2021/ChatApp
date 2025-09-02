@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../Model/user_model.dart';
 import '../Services/database_service.dart';
-import '../Services/qr_service.dart';
 import '../Services/notification_service.dart';
+import '../CustomUI/qr_contact_card.dart';
 import 'welcome_screen.dart';
 
 class ProfileTab extends StatefulWidget {
@@ -14,9 +13,7 @@ class ProfileTab extends StatefulWidget {
 
 class _ProfileTabState extends State<ProfileTab> {
   final DatabaseService _databaseService = DatabaseService();
-  final QRService _qrService = QRService();
   UserModel? currentUser;
-  String qrData = '';
   bool isLoading = true;
 
   @override
@@ -29,10 +26,8 @@ class _ProfileTabState extends State<ProfileTab> {
     try {
       final user = await _databaseService.getCurrentUser();
       if (user != null) {
-        final qrString = await _qrService.generateQRData();
         setState(() {
           currentUser = user;
-          qrData = qrString;
           isLoading = false;
         });
       } else {
@@ -114,87 +109,12 @@ class _ProfileTabState extends State<ProfileTab> {
               ],
             ),
 
-            SizedBox(height: 40),
+            SizedBox(height: 20),
 
-            // QR Code Section
-            Container(
-              width: double.infinity,
-              padding: EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(15),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black12,
-                    blurRadius: 10,
-                    offset: Offset(0, 5),
-                  ),
-                ],
-              ),
-              child: Column(
-                children: [
-                  Text(
-                    'Your QR Code',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xff075E54),
-                    ),
-                  ),
-                  SizedBox(height: 10),
-                  Text(
-                    'Let others scan this code to start chatting with you',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-                  ),
-                  SizedBox(height: 20),
-                  Container(
-                    padding: EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.grey[300]!),
-                    ),
-                    child: qrData.isNotEmpty
-                        ? QrImageView(
-                            data: qrData,
-                            version: QrVersions.auto,
-                            size: 200.0,
-                            foregroundColor: Color(0xff075E54),
-                          )
-                        : Container(
-                            height: 200,
-                            child: Center(child: CircularProgressIndicator()),
-                          ),
-                  ),
-                  SizedBox(height: 15),
-                  Container(
-                    padding: EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Color(0xff075E54).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.info_outline,
-                          color: Color(0xff075E54),
-                          size: 16,
-                        ),
-                        SizedBox(width: 5),
-                        Text(
-                          'This QR code is unique to you',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Color(0xff075E54),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+            // QR Contact Card
+            QRContactCard(
+              user: currentUser!,
+              showActions: true,
             ),
 
             SizedBox(height: 30),

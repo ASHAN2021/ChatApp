@@ -3,6 +3,7 @@ import '../Services/qr_service.dart';
 import '../Services/database_service.dart';
 import '../Services/notification_service.dart';
 import '../CustomUI/qr_scanner_widget.dart';
+import '../CustomUI/contact_connection_dialog.dart';
 import '../Model/chat_model.dart';
 import '../Screens/individual_page.dart';
 
@@ -141,51 +142,88 @@ class _ScanTabState extends State<ScanTab> {
     });
 
     try {
-      if (_qrService.isValidQRData(qrData)) {
-        final chat = await _qrService.processScannedQR(qrData);
-        final currentUser = await _databaseService.getCurrentUser();
-
-        if (chat != null && currentUser != null) {
-          // Create source chat model from current user
-          final sourceChat = ChatModel(
-            id: currentUser.id,
-            name: currentUser.name,
-            lastMessage: '',
-            lastMessageTime: DateTime.now(),
-            profileImage: currentUser.profileImage,
-            isOnline: true,
-          );
-
-          NotificationService.showSuccess(
-            context,
-            'Connected to ${chat.name}!',
-          );
-
-          // Navigate directly to individual chat page
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) =>
-                  IndividualPage(chatModel: chat, sourceChat: sourceChat),
-            ),
-          );
-        } else {
-          NotificationService.showError(
-            context,
-            'Failed to connect. Please try again.',
-          );
-        }
-      } else {
+      // Validate QR data first
+      if (!_qrService.isValidQRData(qrData)) {
         NotificationService.showError(
           context,
           'Invalid QR code. Please scan a valid QR Chat code.',
         );
+        return;
+      }
+
+      // Parse QR data
+      final scannedData = _qrService.parseQRData(qrData);
+      if (scannedData == null) {
+        NotificationService.showError(
+          context,
+          'Failed to read QR code data. Please try again.',
+        );
+        return;
+      }
+
+      // Get current user
+      final currentUser = await _databaseService.getCurrentUser();
+      if (currentUser == null) {
+        NotificationService.showError(
+          context,
+          'User not found. Please set up your profile first.',
+        );
+        return;
+      }
+
+      // Check if trying to scan own QR code
+      if (scannedData['userId'] == currentUser.id) {
+        NotificationService.showError(
+          context,
+          'You cannot scan your own QR code.',
+        );
+        return;
+      }
+
+      // Show connection confirmation dialog
+      final shouldConnect = await _showConnectionDialog(scannedData);
+      if (!shouldConnect) {
+        return; // User cancelled
+      }
+
+      // Process the QR and create connection
+      final chat = await _qrService.processScannedQR(qrData);
+      if (chat != null) {
+        // Create source chat model from current user
+        final sourceChat = ChatModel(
+          id: currentUser.id,
+          name: currentUser.name,
+          lastMessage: '',
+          lastMessageTime: DateTime.now(),
+          profileImage: currentUser.profileImage,
+          isOnline: true,
+        );
+
+        // Show success dialog
+        await _showSuccessDialog(scannedData['userName']);
+
+        // Navigate to chat
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) =>
+                IndividualPage(chatModel: chat, sourceChat: sourceChat),
+          ),
+        );
+      } else {
+        NotificationService.showError(
+          context,
+          'Failed to connect. Please try again.',
+        );
       }
     } catch (e) {
-      NotificationService.showError(
-        context,
-        'Error processing QR code. Please try again.',
-      );
+      String errorMessage = 'Error processing QR code. Please try again.';
+      
+      if (e.toString().contains('Cannot scan your own QR code')) {
+        errorMessage = 'You cannot scan your own QR code.';
+      }
+      
+      NotificationService.showError(context, errorMessage);
       print('QR scan error: $e');
     } finally {
       setState(() {
@@ -195,6 +233,39 @@ class _ScanTabState extends State<ScanTab> {
       // Add delay before allowing next scan
       await Future.delayed(Duration(seconds: 2));
     }
+  }
+
+  Future<bool> _showConnectionDialog(Map<String, dynamic> contactData) async {
+    bool shouldConnect = false;
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => ContactConnectionDialog(
+        contactData: contactData,
+        onConnect: () {
+          shouldConnect = true;
+          Navigator.pop(context);
+        },
+        onCancel: () {
+          shouldConnect = false;
+          Navigator.pop(context);
+        },
+      ),
+    );
+
+    return shouldConnect;
+  }
+
+  Future<void> _showSuccessDialog(String contactName) async {
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => ConnectionSuccessDialog(
+        contactName: contactName,
+        onContinue: () => Navigator.pop(context),
+      ),
+    );
   }
 
   void _showManualInputDialog() {

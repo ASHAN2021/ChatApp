@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 import '../Model/user_model.dart';
-import 'home_screen.dart';
+import 'main_screen.dart';
 
 class UserSelectionScreen extends StatefulWidget {
   const UserSelectionScreen({super.key});
@@ -341,7 +341,7 @@ class _UserSelectionScreenState extends State<UserSelectionScreen> {
                         Navigator.pushReplacement(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => HomeScreen(currentUser: user),
+                            builder: (context) => MainScreen(),
                           ),
                         );
                       },

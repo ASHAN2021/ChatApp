@@ -3,10 +3,10 @@ import 'dart:io';
 import 'package:chatapp/CustomUI/own_file_card.dart';
 import 'package:chatapp/CustomUI/own_message_card.dart';
 import 'package:chatapp/CustomUI/reply_file_card.dart';
-import 'package:chatapp/CustomUI/reply_message.dart';
+import 'package:chatapp/CustomUI/reply_card.dart';
 import 'package:chatapp/Model/chat_model.dart';
 import 'package:chatapp/Model/message_model.dart';
-import 'package:chatapp/Screens/camera_screen.dart';
+import 'package:chatapp/Screens/camera_view.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/svg.dart';
@@ -381,11 +381,14 @@ class _IndividualPageState extends State<IndividualPage> {
       messages.add(
         MessageModel(
           id: DateTime.now().millisecondsSinceEpoch.toString(),
+          chatId: widget.chatModel?.id ?? '',
+          senderId: type == "source" ? widget.sourceChat?.id ?? '' : widget.chatModel?.id ?? '',
           message: message,
-          type: type,
-          time: _formatTime(DateTime.now().toIso8601String()),
+          timestamp: DateTime.now(),
+          isMe: type == "source",
           messageType: path.isNotEmpty ? 'image' : 'text',
           path: path,
+          time: _formatTime(DateTime.now().toIso8601String()),
           isRead: type == "source",
         ),
       );
@@ -584,25 +587,23 @@ class _IndividualPageState extends State<IndividualPage> {
                             itemCount: messages.length,
                             itemBuilder: (context, index) {
                               return messages[index].messageType == "text"
-                                  ? messages[index].type == "source"
+                                  ? messages[index].isMe
                                         ? OwnMessageCard(
-                                            message: messages[index].message,
-                                            time: messages[index].time,
+                                            message: messages[index],
                                           )
                                         : ReplyCard(
-                                            message: messages[index].message,
-                                            time: messages[index].time,
+                                            message: messages[index],
                                           )
-                                  : messages[index].type == "source"
+                                  : messages[index].isMe
                                   ? OwnFileCard(
                                       path: messages[index].path,
                                       message: messages[index].message,
-                                      time: messages[index].time,
+                                      time: messages[index].time ?? '',
                                     )
                                   : ReplyFileCard(
                                       path: messages[index].path,
                                       message: messages[index].message,
-                                      time: messages[index].time,
+                                      time: messages[index].time ?? '',
                                     );
                             },
                           ),
@@ -760,17 +761,17 @@ class _IndividualPageState extends State<IndividualPage> {
           });
         }
       },
-      config: Config(
-        columns: 7,
-        emojiSizeMax: 32 * (Platform.isIOS ? 1.30 : 1.0),
-        verticalSpacing: 0,
-        horizontalSpacing: 0,
-        initCategory: Category.RECENT,
-        bgColor: const Color(0xFFF2F2F2),
-        indicatorColor: Colors.blue,
-        iconColor: Colors.grey,
-        iconColorSelected: Colors.blue,
-        recentsLimit: 28,
+      config: const Config(
+        height: 256,
+        checkPlatformCompatibility: true,
+        emojiViewConfig: EmojiViewConfig(
+          columns: 7,
+          emojiSizeMax: 32,
+        ),
+        skinToneConfig: SkinToneConfig(),
+        categoryViewConfig: CategoryViewConfig(),
+        bottomActionBarConfig: BottomActionBarConfig(),
+        searchViewConfig: SearchViewConfig(),
       ),
     );
   }
@@ -854,7 +855,7 @@ class _IndividualPageState extends State<IndividualPage> {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => CameraViewPage(
+            builder: (context) => CameraView(
               path: file!.path,
               onImageSend: (String imagePath, String message) {
                 sendMessage(message, "image", path: imagePath);
@@ -880,7 +881,7 @@ class _IndividualPageState extends State<IndividualPage> {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => CameraViewPage(
+            builder: (context) => CameraView(
               path: file!.path,
               onImageSend: (String imagePath, String message) {
                 sendMessage(message, "image", path: imagePath);
